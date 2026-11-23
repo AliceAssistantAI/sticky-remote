@@ -1,14 +1,14 @@
 {
   "name": "Sticky Remote",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "path": "https://github.com/AliceAssistantAI/sticky-remote/releases/download/v0.8.0/sticky-remote-0.8.0.ota.bin",
-        "md5": "dafef015233534fec3ea92f5bab2eb8c",
-        "release_url": "https://github.com/AliceAssistantAI/sticky-remote/releases/tag/v0.8.0",
-        "summary": "The remote drives an Android TV now, through the Android TV Remote integration in Home Assistant.\nThe app button opens any app the TV can launch; the setup page asks for its name.\nTapping the position bar hops ten seconds forward or back, since Android TV has no jump-to-position."
+        "path": "https://github.com/AliceAssistantAI/sticky-remote/releases/download/v0.8.1/sticky-remote-0.8.1.ota.bin",
+        "md5": "1b78b8be6237e10c74f79f6016d7e177",
+        "release_url": "https://github.com/AliceAssistantAI/sticky-remote/releases/tag/v0.8.1",
+        "summary": "Rebuilt with the ESPHome release the original firmware used (2026.10.2): the setup page over USB behaves like it does on a factory Sticky."
       }
     }
   ]

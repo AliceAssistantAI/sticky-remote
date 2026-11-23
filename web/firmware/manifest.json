@@ -1,9 +1,9 @@
 {
   "name": "Sticky Remote",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "chip": "ESP32-S3",
-  "file": "sticky-remote-0.8.0.factory.bin",
-  "size": 1404256,
-  "sha256": "69d864b0ee02b9b4939ab1bb2685ee14ee2df07f3ab3d941fa057825cd78142b",
-  "built": "2026-11-23T18:08:53Z"
+  "file": "sticky-remote-0.8.1.factory.bin",
+  "size": 1380832,
+  "sha256": "259acaaeca34aa858bab833feaa38fda1fac7106934bd23ad289f62a96b12fe6",
+  "built": "2026-11-23T18:40:34Z"
 }
