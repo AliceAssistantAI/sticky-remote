@@ -869,11 +869,7 @@ async function connect() {
     }
     status.hidden = false; status.className = "note"; status.textContent = "Asking the Sticky…";
     S.info = await S.serial.info(3);
-    if (!S.info && !DEMO) {
-      // Silence usually means the board reset or crashed under the connection:
-      // keep its own words in the console for a bug report.
-      console.info("[sticky] no setup answer; device log:\n" + (S.serial.recentLog() || "(the Sticky printed nothing)"));
-    }
+    if (!S.info && !DEMO) await waitForLauncherBoot(status);
     S.connectedAt = Date.now();
     const i = S.info;
     S.wasConfigured = !!i?.configured;
@@ -890,6 +886,34 @@ async function connect() {
     if (e?.name === "NotFoundError") return; // the user closed the port picker
     status.hidden = false; status.className = "note bad";
     status.textContent = e?.message?.includes("open") ? "That port is busy: close other apps using it (Sticky Simulator, a serial monitor) and try again." : String(e?.message || e);
+  }
+}
+
+/**
+ * A Sticky living in a launcher app (Launcher, M5Burner) restarts into the
+ * launcher menu when the page opens the port, and its Sticky Remote app
+ * only answers seconds later — sometimes only after the button is pressed.
+ * Keep asking instead of mistaking that slow boot for "no firmware".
+ */
+async function waitForLauncherBoot(status) {
+  const lines = S.serial?.recentLog?.() || "";
+  if (!/Launcher|App menu item|enter the Launcher/.test(lines)) {
+    console.info("[sticky] no setup answer; device log:\n" + (lines || "(the Sticky printed nothing)"));
+    return;
+  }
+  let until = Date.now() + 15000;
+  status.textContent = "A launcher app is on this Sticky: waiting for it to start Sticky Remote…";
+  while (!S.info && Date.now() < until) {
+    await sleep(2500);
+    S.info = await S.serial.info(3);
+  }
+  if (S.info) return;
+  status.className = "note warn";
+  status.textContent = "The launcher didn't start Sticky Remote by itself. Press the button on the Sticky and pick it — this page continues on its own.";
+  until = Date.now() + 300000;
+  while (!S.info && Date.now() < until) {
+    await sleep(2500);
+    S.info = await S.serial.info(3);
   }
 }
 
