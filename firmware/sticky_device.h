@@ -108,6 +108,13 @@ inline void copy_out(char *dst, size_t n, const std::string &src) {
   dst[n - 1] = 0;
 }
 
+// --- Scenes (its own preference: the settings' stored layout stays as it was) ---
+struct ScenesStored { char text[220]; };
+inline esphome::ESPPreferenceObject &scenes_pref() {
+  static esphome::ESPPreferenceObject p = esphome::global_preferences->make_preference<ScenesStored>(0x534B5343, true);
+  return p;
+}
+
 /// Loads stored settings (falling back to the YAML defaults).
 inline void load() {
   Stored st{};
@@ -123,13 +130,6 @@ inline void load() {
   if (scenes_pref().load(&sc)) s.scenes = sc.text;
   ESP_LOGI(TAG, "settings: %s, player=%s light1=%s light2=%s", stored_present() ? "stored" : "defaults",
            s.player.c_str(), s.light1.c_str(), s.light2.c_str());
-}
-
-// --- Scenes (its own preference: the settings' stored layout stays as it was) ---
-struct ScenesStored { char text[220]; };
-inline esphome::ESPPreferenceObject &scenes_pref() {
-  static esphome::ESPPreferenceObject p = esphome::global_preferences->make_preference<ScenesStored>(0x534B5343, true);
-  return p;
 }
 
 inline bool save(const Settings &s) {
