@@ -11,6 +11,13 @@ the browser, with no tools to install.
 computer, plug the Sticky in over USB-C and follow the steps. `?demo` on that
 page runs the whole wizard without a Sticky or a Home Assistant.
 
+**Installed it with a launcher app instead?** If the Sticky runs
+[Launcher](https://github.com/bmorcelli/Launcher) (or M5Burner), install
+[`sticky-remote-latest.ota.bin`](https://github.com/AliceAssistantAI/sticky-remote/releases/latest/download/sticky-remote-latest.ota.bin)
+from its own OTA menu — the plain app image, not the `.factory.bin` — then
+open the setup page, connect the Sticky over USB for the settings, and pick
+**Skip flashing** when the install screen appears.
+
 > Status: runs on a real Sticky (display, Wi-Fi, Home Assistant, touch since 0.2.4). Sleep, wake and battery life are still to be confirmed; see
 > [What to check on a real device](#what-to-check-on-a-real-device).
 

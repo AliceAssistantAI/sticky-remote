@@ -147,6 +147,10 @@ const VIEWS = [
               <h2>Set up your Sticky</h2>
               <p class="lead">About five minutes. Plug the Sticky into this computer with a USB-C <b>data</b> cable, then connect it here. Its port is usually called “USB Single Serial” or “wchusbserial”.</p>
               ${ok ? portRow(true) : `<p class="note bad">This browser can't reach USB devices. Open this page in Chrome or Edge on a computer.</p>`}
+              <p class="note">Already installed the firmware with a launcher app like
+              <a href="https://github.com/bmorcelli/Launcher" rel="noopener">Launcher</a> or M5Burner
+              (the <code>.ota.bin</code> from the GitHub releases)? Connect the Sticky and pick
+              <b>Skip flashing</b> when the install screen appears — this page then only does the setup.</p>
               <h3>You'll also need</h3>
               <ul>
                 <li>The Wi-Fi network for the Sticky (2.4 GHz).</li>
@@ -217,7 +221,7 @@ const VIEWS = [
           <div id="log" class="log" hidden></div>
           <div class="actions">
             <button id="unpick">${i?.configured ? "Back" : "Choose Another Port"}</button>
-            ${i && !i.configured ? `<button class="link" id="keepfw">Keep version ${esc(i.fw)}</button>` : ""}
+            ${i && !i.configured ? `<button class="link" id="keepfw" title="Continue with the firmware that's on it now — one installed with Launcher, M5Burner or ESPHome Web. No flashing.">Skip flashing — set up ${esc(i.fw)}</button>` : ""}
             <span class="spacer"></span><button class="primary" id="go">${c || fresh ? "Install" : update ? "Update" : "Reinstall"}</button>
           </div>`,
         bind: () => {
