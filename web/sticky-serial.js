@@ -15,6 +15,7 @@ export class StickySerial {
     this.port = port;
     this.listeners = new Set();
     this.reading = false;
+    this.log = [];            // the Sticky's own log lines, newest last
   }
 
   /** Opens the port at 115200 without disturbing the chip (DTR/RTS low). */
@@ -40,7 +41,10 @@ export class StickySerial {
           while ((i = pending.search(/[\r\n]/)) >= 0) {
             const line = pending.slice(0, i).trim();
             pending = pending.slice(i + 1);
-            if (!line.startsWith("{") || !line.includes('"sticky"')) continue;
+            if (!line.startsWith("{") || !line.includes('"sticky"')) {
+              if (line) this.logLine(line);
+              continue;
+            }
             try {
               const msg = JSON.parse(line);
               if (msg.sticky === "setup") this.listeners.forEach((f) => f(msg));
@@ -52,6 +56,18 @@ export class StickySerial {
       finally { try { this.reader.releaseLock(); } catch {} }
       if (this.reading) await sleep(200);
     }
+  }
+
+  /** Keeps and prints a Sticky log line so a crash is visible in F12. */
+  logLine(line) {
+    this.log.push(line);
+    if (this.log.length > 60) this.log.shift();
+    console.info("[sticky]", line);
+  }
+
+  /** The last lines the Sticky printed — paste them into a bug report. */
+  recentLog() {
+    return this.log.slice(-25).join("\n");
   }
 
   async close() {

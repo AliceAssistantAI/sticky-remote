@@ -869,6 +869,11 @@ async function connect() {
     }
     status.hidden = false; status.className = "note"; status.textContent = "Asking the Sticky…";
     S.info = await S.serial.info(3);
+    if (!S.info && !DEMO) {
+      // Silence usually means the board reset or crashed under the connection:
+      // keep its own words in the console for a bug report.
+      console.info("[sticky] no setup answer; device log:\n" + (S.serial.recentLog() || "(the Sticky printed nothing)"));
+    }
     S.connectedAt = Date.now();
     const i = S.info;
     S.wasConfigured = !!i?.configured;

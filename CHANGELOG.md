@@ -3,6 +3,10 @@
 Each version's first list is what the Sticky shows on its update screen
 (short lines, plain characters); web/build.sh puts it in the update manifest.
 
+## 0.8.1
+
+- Rebuilt with the ESPHome release the original firmware used (2026.10.2): the setup page over USB behaves like it does on a factory Sticky.
+
 ## 0.8.0
 
 - The remote drives an Android TV now, through the Android TV Remote integration in Home Assistant.

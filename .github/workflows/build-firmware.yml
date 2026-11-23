@@ -36,12 +36,16 @@ jobs:
             ~/.espidf
             ~/.espressif
             ~/.cache/pip
-          key: esphome-${{ hashFiles('firmware/*.yaml') }}
-          restore-keys: esphome-
+          key: esphome2-${{ hashFiles('firmware/*.yaml') }}
+          restore-keys: esphome2-
 
       - name: Install ESPHome
         run: |
-          pip install --quiet esphome
+          # 2026.10.2: the release the original firmware was built with. Keep
+          # this pinned until a bump is tested on a real Sticky: newer
+          # ESPHome/ESP-IDF changed serial behaviour (setup over USB rebooted
+          # the board with no answer).
+          pip install --quiet esphome==2026.10.2
           esphome version
 
       - name: Compile the generic firmware
