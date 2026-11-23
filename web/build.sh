@@ -48,7 +48,7 @@ m = re.search(rf"^## {re.escape(version)}\n(.*?)(?=^## |\Z)", text, re.S | re.M)
 items = [l[2:].strip() for l in (m[1] if m else "").splitlines() if l.startswith("- ")]
 if not items:
     sys.exit(f"CHANGELOG.md has no list for {version}")
-rel = "https://github.com/Frankynov/sticky-remote/releases"
+rel = "https://github.com/AliceAssistantAI/sticky-remote/releases"
 manifest = {"name": "Sticky Remote", "version": version, "builds": [{"chipFamily": "ESP32-S3", "ota": {
     "path": f"{rel}/download/v{version}/{ota}", "md5": md5, "release_url": f"{rel}/tag/v{version}",
     "summary": "\n".join(items)}}]}

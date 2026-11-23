@@ -16,8 +16,8 @@ poster = Image.open(ROOT / "design" / "posters" / "night.png").convert("L")
 raw = TMP / "screens-poster.raw"
 raw.write_bytes(poster.tobytes())
 BASE = ["online 1", "battery 78", "volume 0.4", "light_icon0 floor", "light_icon1 ceiling", "light_count 2",
-        "light0_state on", "light0_brightness 158", "light1_state off", "app_button Infuse"]
-PLAYING = ["atv_state playing", "app Infuse", "title The Long Night", "duration 8040", "position 3734",
+        "light0_state on", "light0_brightness 158", "light1_state off", "app_button YouTube"]
+PLAYING = ["player_state playing", "app YouTube", "title The Long Night", "duration 8040", "position 3734",
            "position_at 2026-10-26T18:00:00+00:00", "picture night"]
 
 
@@ -27,7 +27,7 @@ def shot(extra, taps=(), with_poster=False, hm=(20, 30)):
     def cmd(line):
         p.stdin.write(line + "\n"); p.stdin.flush()
         return p.stdout.readline()
-    cmd("labels Living room|Floor lamp|Ceiling|Open Infuse|Apple TV")
+    cmd("labels Living room|Floor lamp|Ceiling|Android TV")
     for c in BASE + extra:
         cmd("set " + c)
     if with_poster:
@@ -43,8 +43,8 @@ def shot(extra, taps=(), with_poster=False, hm=(20, 30)):
 
 
 screens = [shot(PLAYING, with_poster=True), shot(PLAYING, taps=[(240, 440)], with_poster=True),   # a pressed arrow
-           shot(["atv_state idle", "app Infuse"]), shot(["atv_state off"]),
-           shot(["atv_state off", "date 5 13 11", "sleeping 1"], hm=(21, 47))]   # asleep, with the clock
+           shot(["player_state idle", "app YouTube"]), shot(["player_state off"]),
+           shot(["player_state off", "date 5 13 11", "sleeping 1"], hm=(21, 47))]   # asleep, with the clock
 gap = 24
 sheet = Image.new("L", (len(screens) * 480 + (len(screens) + 1) * gap, 800 + 2 * gap), 150)
 for i, im in enumerate(screens):

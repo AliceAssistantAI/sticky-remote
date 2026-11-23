@@ -96,9 +96,9 @@ export class DemoHA {
     const L = (id, name, s) => ({ entity_id: id, state: s, attributes: { friendly_name: name } });
     return [
       { entity_id: "media_player.salon", state: "idle",
-        attributes: { friendly_name: "Salon Apple TV", source_list: ["Infuse", "Netflix", "YouTube", "TV"] } },
+        attributes: { friendly_name: "Salon Android TV" } },
       { entity_id: "media_player.kitchen_speaker", state: "idle", attributes: { friendly_name: "Kitchen speaker" } },
-      L("remote.salon", "Salon Apple TV", "on"),
+      L("remote.salon", "Salon Android TV", "on"),
       L("light.floor_lamp", "Floor lamp", "off"),
       { entity_id: "light.ceiling", state: "on", attributes: { friendly_name: "Ceiling", brightness: 158 } },
       L("light.desk", "Desk lamp", "off"),

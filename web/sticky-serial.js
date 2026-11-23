@@ -157,8 +157,8 @@ export class DemoSticky {
       this.state.wifi = { ssid: "Maison" };
       this.state.ha = { connected: false, paired: true };
       this.booted = Date.now();
-      this.state.settings = { player: "media_player.salon", remote: "remote.salon", player_name: "Apple TV", app: "Infuse",
-        app_label: "Open Infuse", light1: "light.floor_lamp", light1_name: "Floor lamp", light1_icon: "floor",
+      this.state.settings = { player: "media_player.salon", remote: "remote.salon", player_name: "Android TV", app: "YouTube",
+        app_label: "", light1: "light.floor_lamp", light1_name: "Floor lamp", light1_icon: "floor",
         light2: "light.ceiling", light2_name: "Ceiling", light2_icon: "ceiling", room: "Salon", ha_url: "", font_set: "inter",
         touch_sound: "quiet", sleep_after: "3", sleep_clock: "on" };
     }

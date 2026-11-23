@@ -62,14 +62,14 @@ int main(int argc, char **argv) {
       for (size_t i = value.find("\\n"); i != std::string::npos; i = value.find("\\n", i + 1))
         value.replace(i, 2, "\n");   // one command per line: "\n" stands for a line break
       sc_set(key.c_str(), value.c_str());
-    } else if (cmd == "labels") {  // labels <room>|<light 1>|<light 2>|<app button>|<player>
+    } else if (cmd == "labels") {  // labels <room>|<light 1>|<light 2>|<player>
       std::string rest, part;
       std::getline(ss, rest);
       std::vector<std::string> parts;
       std::stringstream ps(rest.substr(rest.find_first_not_of(' ') == std::string::npos ? 0 : rest.find_first_not_of(' ')));
       while (std::getline(ps, part, '|')) parts.push_back(part);
-      while (parts.size() < 5) parts.push_back("");
-      sc_set_labels(parts[0].c_str(), parts[1].c_str(), parts[2].c_str(), parts[3].c_str(), parts[4].c_str());
+      while (parts.size() < 4) parts.push_back("");
+      sc_set_labels(parts[0].c_str(), parts[1].c_str(), parts[2].c_str(), parts[3].c_str());
     } else if (cmd == "poster") {  // poster <raw gray file> <w> <h> | poster none
       std::string path;
       int w = 0, h = 0;

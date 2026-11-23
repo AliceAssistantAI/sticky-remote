@@ -27,11 +27,11 @@ substitutions:
   # Home Assistant base URL, used to fetch the artwork (entity_picture is a
   # relative /api/media_player_proxy/... path that carries its own token).
   ha_base_url: http://homeassistant.local:8123
-  apple_tv: media_player.living_room
-  apple_tv_remote: remote.living_room
-  player_name: Apple TV
-  infuse_source: Infuse
-  infuse_label: Open Infuse
+  tv_media_player: media_player.living_room
+  tv_remote: remote.living_room
+  player_name: Android TV
+  app_name: YouTube
+  app_label: App
   light_1: light.floor_lamp
   light_1_name: Floor lamp
   light_1_icon: floor         # bulb, ceiling, floor or star
@@ -106,11 +106,11 @@ esphome:
             remote_ui::request(true);
             // Settings: the YAML's values are defaults; stored ones (sent over USB) win.
             auto &d = sticky::defaults();
-            d.player = "${apple_tv}";
-            d.remote = "${apple_tv_remote}";
+            d.player = "${tv_media_player}";
+            d.remote = "${tv_remote}";
             d.player_name = "${player_name}";
-            d.app = "${infuse_source}";
-            d.app_label = "${infuse_label}";
+            d.app = "${app_name}";
+            d.app_label = "${app_label}";
             d.light1 = "${light_1}";
             d.light1_name = "${light_1_name}";
             d.light1_icon = "${light_1_icon}";
@@ -141,16 +141,16 @@ esphome:
               void toggle_light(int i) override {
                 if (i == 0) id(toggle_light_1).execute(); else id(toggle_light_2).execute();
               }
-              void atv_power(bool on) override {
-                if (on) id(atv_turn_on).execute(); else id(atv_turn_off).execute();
+              void tv_power(bool on) override {
+                if (on) id(tv_turn_on).execute(); else id(tv_turn_off).execute();
               }
-              void play_pause() override { id(atv_play_pause).execute(); }
-              void seek(float s) override { id(atv_seek).execute(s); }
-              void remote_command(const char *c) override { id(atv_remote).execute(std::string(c)); }
+              void play_pause() override { id(tv_play_pause).execute(); }
+              void seek(bool forward) override { id(tv_seek).execute(forward ? 1 : 0); }
+              void remote_command(const char *c) override { id(tv_remote_key).execute(std::string(c)); }
               void volume(bool up) override {
-                if (up) id(atv_volume_up).execute(); else id(atv_volume_down).execute();
+                if (up) id(tv_volume_up).execute(); else id(tv_volume_down).execute();
               }
-              void open_infuse() override { id(atv_open_infuse).execute(); }
+              void open_app() override { id(tv_open_app).execute(); }
               void save_touch_cal(const remote_ui::TouchCal &c) override { sticky::save_touch_cal(c); }
               void sleep() override { id(go_to_sleep).execute(); }
               void install_update() override { id(install_firmware).execute(); }
@@ -249,7 +249,7 @@ update:
     id: fw_update
     name: Firmware
     ota_id: ota_github
-    source: https://github.com/Frankynov/sticky-remote/releases/latest/download/ota-manifest.json
+    source: https://github.com/AliceAssistantAI/sticky-remote/releases/latest/download/ota-manifest.json
     # Not on its own (it would check after every wake): the interval below decides.
     update_interval: never
 
@@ -517,36 +517,41 @@ script:
           data:
             entity_id: !lambda "return sticky::settings().light2;"
 
-  - id: atv_turn_on
+  # On/off goes through the Android TV Remote integration's remote entity,
+  # which reaches a sleeping TV over the network (CEC via the media_player
+  # entity misses TVs that cut power).
+  - id: tv_turn_on
     then:
       - homeassistant.action:
-          action: media_player.turn_on
+          action: remote.turn_on
           data:
-            entity_id: !lambda "return sticky::settings().player;"
-  - id: atv_turn_off
+            entity_id: !lambda "return sticky::settings().remote;"
+  - id: tv_turn_off
     then:
       - homeassistant.action:
-          action: media_player.turn_off
+          action: remote.turn_off
           data:
-            entity_id: !lambda "return sticky::settings().player;"
-  - id: atv_play_pause
+            entity_id: !lambda "return sticky::settings().remote;"
+  - id: tv_play_pause
     then:
       - homeassistant.action:
           action: media_player.media_play_pause
           data:
             entity_id: !lambda "return sticky::settings().player;"
-  - id: atv_seek
+  # Android TV has no absolute seek: the transport keys hop back or forward by
+  # the app's step (YouTube 10 s, most players 30 s).
+  - id: tv_seek
     parameters:
-      pos: float
+      forward: int
     then:
       - homeassistant.action:
-          action: media_player.media_seek
+          action: remote.send_command
           data:
-            entity_id: !lambda "return sticky::settings().player;"
-            seek_position: !lambda 'return esphome::to_string((int) pos);'
-  # Remote keys (up/down/left/right/select/menu/home), and the skip fallback
-  # when HA reports no position (skip_forward/backward: the app picks the step).
-  - id: atv_remote
+            entity_id: !lambda "return sticky::settings().remote;"
+            command: !lambda 'return std::string(forward ? "MEDIA_FAST_FORWARD" : "MEDIA_REWIND");'
+  # Pad keys (DPAD_UP / DPAD_DOWN / DPAD_LEFT / DPAD_RIGHT / DPAD_CENTER /
+  # BACK / HOME) straight to the Android TV Remote integration.
+  - id: tv_remote_key
     mode: queued
     parameters:
       command: string
@@ -556,25 +561,28 @@ script:
           data:
             entity_id: !lambda "return sticky::settings().remote;"
             command: !lambda 'return command;'
-  - id: atv_volume_up
+  - id: tv_volume_up
     then:
       - homeassistant.action:
           action: media_player.volume_up
           data:
             entity_id: !lambda "return sticky::settings().player;"
-  - id: atv_volume_down
+  - id: tv_volume_down
     then:
       - homeassistant.action:
           action: media_player.volume_down
           data:
             entity_id: !lambda "return sticky::settings().player;"
-  - id: atv_open_infuse
+  # Opens the app key's app: the Android TV Remote integration launches apps
+  # through remote.turn_on, matching the app's name as the activity
+  # ("YouTube" starts the installed app whose name matches).
+  - id: tv_open_app
     then:
       - homeassistant.action:
-          action: media_player.select_source
+          action: remote.turn_on
           data:
-            entity_id: !lambda "return sticky::settings().player;"
-            source: !lambda "return sticky::settings().app;"
+            entity_id: !lambda "return sticky::settings().remote;"
+            activity: !lambda "return sticky::settings().app;"
 
   # Leave the "Asleep" face on the panel, then sleep. With the clock on (and
   # off USB, and set up), that is light sleep with a wake every minute to move

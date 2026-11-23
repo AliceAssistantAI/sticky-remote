@@ -412,8 +412,8 @@ const VIEWS = [
                 ${sources.length && !manual
                   ? `<label class="field"><span>App button opens</span><select data-k="app"><option value="">No app</option>
                       ${sources.map((x) => `<option ${x === s.app ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>`
-                  : text("app", "App button opens", "Infuse")}
-                ${text("player_name", "Name on the power tile", "Apple TV")}
+                  : text("app", "App button opens", "YouTube")}
+                ${text("player_name", "Name on the power tile", "Android TV")}
               </div>` : ""}
             </section>
             <section class="card">
@@ -473,12 +473,15 @@ const VIEWS = [
             const k = el.dataset.k;
             s[k] = el.value.trim();
             if (k === "player" && !manual) {
-              // The rest follows from the player: its remote, a name, the app if it has Infuse.
+              // The rest follows from the player: its remote (the Android TV
+              // Remote integration creates both from the same device) and a
+              // name. The app it launches can't be read from the TV, so a
+              // player change leaves it to re-enter.
               const r = "remote." + s.player.split(".")[1];
               s.remote = S.ha.states.some((e) => e.entity_id === r) ? r : s.remote;
               s.player_name = s.player ? shortName(s.player) : "";
               const src = S.ha.states.find((e) => e.entity_id === s.player)?.attributes?.source_list || [];
-              if (!src.includes(s.app)) s.app = src.includes("Infuse") ? "Infuse" : "";
+              if (!src.includes(s.app)) s.app = "";
               s.app_label = s.app ? `Open ${s.app}` : "";
               return render();
             }

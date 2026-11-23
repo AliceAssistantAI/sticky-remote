@@ -27,10 +27,9 @@ int sc_font_load_fnt(int index, const char *path);
 /// Same, from the file's text already in memory (the web page has no files).
 int sc_font_load_fnt_text(int index, const char *text);
 
-void sc_set_labels(const char *room, const char *light_1, const char *light_2, const char *infuse,
-                   const char *player);
+void sc_set_labels(const char *room, const char *light_1, const char *light_2, const char *player);
 /// Feeds one Home Assistant value, as the firmware's on_value handlers do. Keys:
-/// atv_state title series artist app season episode position duration volume
+/// player_state title series artist app season episode position duration volume
 /// position_at (ISO 8601) picture light0_state light1_state light0_brightness
 /// light1_brightness online usb battery sleeping. Use "None" for absent.
 void sc_set(const char *key, const char *value);
@@ -38,8 +37,8 @@ void sc_set(const char *key, const char *value);
 void sc_set_poster(const uint8_t *gray, int width, int height);
 
 /// Receives each Home Assistant call the firmware makes, e.g. "toggle_light 0",
-/// "atv_power on", "play_pause", "seek 120", "remote select", "volume up",
-/// "open_infuse", and "beep" for the click sound.
+/// "tv_power on", "play_pause", "seek forward", "remote DPAD_CENTER", "volume up",
+/// "open_app", and "beep" for the click sound.
 typedef void (*sc_call_fn)(void *context, const char *call);
 /// A tap at panel coordinates. Returns the action (see sc_action_name).
 int sc_tap(int x, int y, int64_t now_epoch, sc_call_fn fn, void *context);

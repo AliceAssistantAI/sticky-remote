@@ -20,7 +20,7 @@ for name, d in CASES.items():
         p.stdin.write(line + "\n"); p.stdin.flush()
         return p.stdout.readline()
     lights = d["lights"]
-    cmd(f'labels {d["room"]}|{lights[0]["label"]}|{lights[1]["label"] if len(lights) > 1 else ""}|Open|{d["player"]["label"]}')
+    cmd(f'labels {d["room"]}|{lights[0]["label"]}|{lights[1]["label"] if len(lights) > 1 else ""}|{d["player"]["label"]}')
     cmd(f"set light_count {len(lights)}")
     for i, l in enumerate(lights):
         cmd(f"set light_icon{i} {l['icon']}")
@@ -28,7 +28,7 @@ for name, d in CASES.items():
         if l.get("brightness") is not None:
             cmd(f"set light{i}_brightness {l['brightness']}")
     cmd(f"set app_button {d['app']}")
-    for c in ["online 1", "volume 0.4", "atv_state idle"]:
+    for c in ["online 1", "volume 0.4", "player_state idle"]:
         cmd("set " + c)
     time.sleep(0.3)
     h, m = d["clock"].split(":")

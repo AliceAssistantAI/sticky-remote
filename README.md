@@ -1,13 +1,13 @@
 # Sticky Remote
 
 A firmware that turns the Seeed **reTerminal Sticky** (ESP32-S3, 3.97" 800×480
-e-paper, touch) into a remote for an Apple TV and one or two lights, through
+e-paper, touch) into a remote for an Android TV and one or two lights, through
 **ESPHome** and **Home Assistant**. A web wizard flashes it and sets it up from
 the browser, with no tools to install.
 
 ![screens](design/screens.png)
 
-**Set one up:** open <https://frankynov.ovh/sticky/> in Chrome or Edge on a
+**Set one up:** open <https://aliceassistantai.github.io/sticky-remote/> in Chrome or Edge on a
 computer, plug the Sticky in over USB-C and follow the steps. `?demo` on that
 page runs the whole wizard without a Sticky or a Home Assistant.
 
@@ -18,13 +18,13 @@ page runs the whole wizard without a Sticky or a Home Assistant.
 
 | Area | What it does | Home Assistant |
 |---|---|---|
-| Top tiles | One or two lights (toggle, brightness) and the player's power | `light.toggle`, `media_player.turn_on/off` |
-| Pad | ↑ ↓ ← → and OK, with on-screen feedback. Hold an arrow to repeat it | `remote.send_command` up/down/left/right/select |
-| Keys | Back, Home, the app button (e.g. Infuse), Play/Pause | `remote.send_command` menu/home, `select_source`, `media_play_pause` |
+| Top tiles | One or two lights (toggle, brightness) and the player's power | `light.toggle`, `remote.turn_on/off` |
+| Pad | ↑ ↓ ← → and OK, with on-screen feedback. Hold an arrow to repeat it | `remote.send_command` `DPAD_UP`/`DPAD_DOWN`/`DPAD_LEFT`/`DPAD_RIGHT`/`DPAD_CENTER` |
+| Keys | Back, Home, the app button (e.g. YouTube), Play/Pause | `remote.send_command` `BACK`/`HOME`, `remote.turn_on` with the app name, `media_play_pause` |
 | What's playing | A small artwork (dithered), title, series/episode or artist, app | `media_player` attributes |
-| Seek bar | The position; tap anywhere on it to jump there | `media_player.media_seek` |
-| Skip | −10 s and +10 s | `media_seek` |
-| Idle / off | "Open Infuse" / "Turn on" | `select_source`, `turn_on` |
+| Seek bar | The position; tap it to hop forward or back (Android TV has no absolute seek) | `remote.send_command` transport keys |
+| Skip | −10 s and +10 s | `remote.send_command` `MEDIA_REWIND`/`MEDIA_FAST_FORWARD` |
+| Idle / off | "Open <app>" / "Turn on" | `remote.turn_on` |
 | Volume | − / + and a 10-step level | `media_player.volume_down/up` |
 | Buttons | AI = sleep now (any button wakes it), Up/Down = volume | `volume_up/down` |
 
@@ -104,7 +104,7 @@ Credentials stay with the person setting up the Sticky.
 | `firmware/` | The ESPHome configs, the UI (`remote_ui.h`), device settings and the USB setup protocol (`sticky_device.h`), fonts |
 | `engine/` | The firmware's UI compiled for a computer: a C API (`sticky_core.h`) over `remote_ui.h`, stand-ins for the ESPHome headers it uses, and a command-line renderer (`sim`) |
 | `tests/` | Sleep and wake tests: every decision in `firmware/sleep_logic.h` and whole sequences, on a computer (`tests/run.sh`) |
-| `web/` | The setup wizard and web flasher served at frankynov.ovh/sticky |
+| `web/` | The setup wizard and web flasher served at aliceassistantai.github.io/sticky-remote |
 | `design/` | Mockups (`mockup.py`), sample posters, the app icon |
 | `docs/` | Plans |
 | `Package.swift` | Exposes `engine/` as the `StickyCore` Swift package |

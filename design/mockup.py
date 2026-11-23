@@ -7,7 +7,7 @@
 Renders exactly what the panel can show: black or white pixels, no
 anti-aliasing, the same Inter Bold + Material Design Icons fonts the ESPHome
 firmware uses. The poster is a synthetic image dithered with Floyd-Steinberg,
-like the firmware will do with the Apple TV artwork.
+like the firmware will do with the player artwork.
 
 Usage: python3 design/mockup.py   ->  design/mockup-*.png
 Geometry lives in LAYOUT below and is mirrored in remote_ui.h.
@@ -40,7 +40,7 @@ MINI_Y, MINI_H = 664, 48
 ICON = {
     "star_on": "\U000F0AE2", "star_off": "\U000F0AE3",
     "ceiling_on": "\U000F0769", "ceiling_off": "\U000F17C7",
-    "apple": "\U000F0035", "power": "\U000F0425",
+    "power": "\U000F0425",
     "play": "\U000F040A", "pause": "\U000F03E4",
     "rew": "\U000F0D2A", "ff": "\U000F0D71",
     "vol_minus": "\U000F075E", "vol_plus": "\U000F075D",
@@ -124,13 +124,13 @@ def status_bar(d, clock="21:47", battery=78):
     text(d, (x, STATUS_H // 2 + 1), ICON["wifi"], I[24], anchor="rm")
 
 
-def tiles(d, etoile, luminaire, atv_on):
+def tiles(d, etoile, luminaire, tv_on):
     xs = [M, M + TILE_W + TILE_GAP, M + 2 * (TILE_W + TILE_GAP)]
     tile(d, xs[0], "Étoile", ICON["star_on" if etoile else "star_off"],
          f"{etoile} %" if etoile else "Off", bool(etoile))
     tile(d, xs[1], "Luminaire", ICON["ceiling_on" if luminaire else "ceiling_off"],
          f"{luminaire} %" if luminaire else "Off", bool(luminaire))
-    tile(d, xs[2], "Apple TV", ICON["power"], "On" if atv_on else "Off", atv_on)
+    tile(d, xs[2], "Android TV", ICON["power"], "On" if tv_on else "Off", tv_on)
 
 
 def volume(d, level):
@@ -181,7 +181,7 @@ def remote(d, playing_now=True):
     text(d, (cx, cy + k), ICON["down"], I[64])
     text(d, (cx - k, cy), ICON["left"], I[64])
     text(d, (cx + k, cy), ICON["right"], I[64])
-    keys = [("Back", ICON["back"]), ("Home", ICON["tv"]), ("Infuse", ICON["movie"]),
+    keys = [("Back", ICON["back"]), ("Home", ICON["tv"]), ("YouTube", ICON["movie"]),
             ("Play", ICON["play_pause"])]
     for i, (label, icon) in enumerate(keys):
         x = M + i * (KEY_W + KEY_GAP)
@@ -209,7 +209,7 @@ def playing(d, img, paused=False, pos=3734, dur=8040):
     d.rectangle([px - 1, POSTER_Y - 1, px + pw, POSTER_Y + POSTER_H], outline=INK, width=1)
     title = fit(d, "The Long Night", F[30], W - 2 * M)
     text(d, (W // 2, TITLE_Y), title, F[30], anchor="mt")
-    text(d, (W // 2, SUB_Y), "2023 · Infuse", F[20], anchor="mt")
+    text(d, (W // 2, SUB_Y), "2023 · YouTube", F[20], anchor="mt")
     # seek bar: outline + filled elapsed part + knob
     x0, x1 = M + 10, W - M - 10
     d.rounded_rectangle([x0, SEEK_Y, x1, SEEK_Y + SEEK_H], SEEK_H // 2, outline=INK, width=2)
@@ -232,17 +232,17 @@ def idle(d):
     cy = POSTER_Y + 110
     text(d, (W // 2, cy), ICON["movie"], I[120])
     text(d, (W // 2, cy + 100), "Nothing playing", F[30])
-    text(d, (W // 2, cy + 136), "Apple TV · Home screen", F[20])
-    # primary action: open Infuse
+    text(d, (W // 2, cy + 136), "Android TV · Home screen", F[20])
+    # primary action: open the app
     bw, bh, by = 300, 72, 610
     d.rounded_rectangle([(W - bw) // 2, by, (W + bw) // 2, by + bh], bh // 2, fill=INK)
-    text(d, (W // 2, by + bh // 2), "Open Infuse", F[26], PAPER)
+    text(d, (W // 2, by + bh // 2), "Open YouTube", F[26], PAPER)
 
 
 def off(d):
     cy = TAB_Y + 160
     text(d, (W // 2, cy), ICON["tv_off"], I[120])
-    text(d, (W // 2, cy + 100), "Apple TV is off", F[30])
+    text(d, (W // 2, cy + 100), "Android TV is off", F[30])
     bw, bh, by = 300, 72, 610
     d.rounded_rectangle([(W - bw) // 2, by, (W + bw) // 2, by + bh], bh // 2, fill=INK)
     text(d, (W // 2 - 20, by + bh // 2), "Turn on", F[26], PAPER)

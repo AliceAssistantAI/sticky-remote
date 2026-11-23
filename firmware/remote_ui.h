@@ -115,7 +115,7 @@ inline uint8_t light_icon_index(const std::string &name) {
   return ICON_KIND_BULB;
 }
 // What the Remote page shows as pressed (on-screen feedback for pad and keys).
-enum class Press : uint8_t { NONE, UP, DOWN, LEFT, RIGHT, OK, KEY_BACK, KEY_HOME, KEY_INFUSE, KEY_PLAY, KEY_REW, KEY_FF };
+enum class Press : uint8_t { NONE, UP, DOWN, LEFT, RIGHT, OK, KEY_BACK, KEY_HOME, KEY_APP, KEY_PLAY, KEY_REW, KEY_FF };
 // Feedback clears this long after the last press. Long enough that a quick run of
 // presses moves the highlight instead of waiting behind a refresh that clears it.
 constexpr uint32_t PRESS_SHOW_MS = 1500;
@@ -123,7 +123,7 @@ enum class Page { NOW, REMOTE };
 
 struct Model {
   Light lights[2];
-  std::string atv_state;      // off / standby / idle / on / playing / paused
+  std::string player_state;      // off / standby / idle / on / playing / paused
   std::string title, series, artist, app, picture;
   float season = NAN, episode = NAN;
   float position = NAN, duration = NAN, volume = NAN;  // seconds, seconds, 0..1
@@ -152,7 +152,7 @@ struct Model {
   int light_count = 2;            // 1 or 2 light tiles
   uint8_t light_icon[2] = {3, 1}; // see LightIcon
   bool configured = true;         // false: nothing chosen yet, show "Finish setup"
-  std::string app_button = "Infuse";  // the app the Remote page's app key opens
+  std::string app_button = "App";  // the app the Remote page's app key opens (its friendly name)
 
   // Onboarding
   Net net = Net::CONNECTED;
@@ -173,11 +173,11 @@ struct Model {
   bool in_setup() const { return setup() != Setup::NONE; }
 
   Mode mode() const {
-    if (atv_state == "playing" || atv_state == "paused") return Mode::PLAYING;
-    if (atv_state == "on" || atv_state == "idle") return Mode::IDLE;
+    if (player_state == "playing" || player_state == "paused") return Mode::PLAYING;
+    if (player_state == "on" || player_state == "idle") return Mode::IDLE;
     return Mode::OFF;
   }
-  bool atv_on() const { return mode() != Mode::OFF; }
+  bool player_on() const { return mode() != Mode::OFF; }
 };
 
 inline Model &model() {
@@ -221,7 +221,7 @@ inline int64_t parse_iso8601(const std::string &s) {
 inline float live_position(const Model &m, int64_t now_epoch) {
   if (std::isnan(m.position)) return NAN;
   float p = m.position;
-  if (m.atv_state == "playing" && now_epoch > 0 && m.position_at > 0 && now_epoch > m.position_at)
+  if (m.player_state == "playing" && now_epoch > 0 && m.position_at > 0 && now_epoch > m.position_at)
     p += (float) (now_epoch - m.position_at);
   if (!std::isnan(m.duration) && m.duration > 0 && p > m.duration) p = m.duration;
   return p < 0 ? 0 : p;
@@ -230,7 +230,7 @@ inline float live_position(const Model &m, int64_t now_epoch) {
 // HA sends "None" / "unknown" for attributes that are absent.
 inline std::string clean(const std::string &s) {
   if (s == "None" || s == "unknown" || s == "unavailable") return std::string();
-  // Characters apps use that the fonts don't have (Infuse writes "S10 ∙ E3").
+  // Characters apps use that the fonts don't have (series apps write "S10 ∙ E3").
   static const char *const MAP[][2] = {
       {"\u2219", "\u00b7"}, {"\u2022", "\u00b7"}, {"\u22c5", "\u00b7"}, {"\u2027", "\u00b7"},  // dots → ·
       {"\u2014", "\u2013"}, {"\u2015", "\u2013"}, {"\u2212", "-"},                         // dashes → –, -
@@ -715,7 +715,7 @@ inline void draw_tiles(Ctx &c, const Model &m, const char *name1, const char *na
   const int n = tile_count(m.light_count);
   draw_light_tile(c, 0, n, m.lights[0], name1, m.light_icon[0]);
   if (m.light_count > 1) draw_light_tile(c, 1, n, m.lights[1], name2, m.light_icon[1]);
-  draw_tile(c, n - 1, n, player, ICON_POWER, m.atv_on() ? "On" : "Off", m.atv_on(), !m.atv_state.empty());
+  draw_tile(c, n - 1, n, player, ICON_POWER, m.player_on() ? "On" : "Off", m.player_on(), !m.player_state.empty());
 }
 
 inline void draw_volume(Ctx &c, const Model &m) {
@@ -774,10 +774,10 @@ inline std::string subtitle(const Model &m) {
   return s;
 }
 
-inline void draw_off(Ctx &c) {
+inline void draw_off(Ctx &c, const char *player) {
   const int cy = 334;
   c.it.print(W / 2, cy, c.f.i120, c.ink, TextAlign::CENTER, ICON_TV_OFF);
-  c.it.print(W / 2, cy + 100, c.f.t30, c.ink, TextAlign::CENTER, "Apple TV is off");
+  print_fit(c, W / 2, cy + 100, c.f.t30, c.ink, TextAlign::CENTER, std::string(player) + " is off", W - 2 * M);
   draw_big_button(c, "Turn on", ICON_POWER);
 }
 
@@ -811,7 +811,7 @@ inline void draw_now(Ctx &c, const Model &m, const GrayImage &poster, int64_t no
   // Seek bar: tap anywhere on it to jump there.
   const float pos = live_position(m, now_epoch);
   const bool seekable = !std::isnan(pos) && !std::isnan(m.duration) && m.duration > 0;
-  const bool playing = m.atv_state == "playing";
+  const bool playing = m.player_state == "playing";
   stroke_rrect(c, SEEK_X0, SEEK_Y, SEEK_X1 - SEEK_X0, SEEK_H, SEEK_H / 2, 2);
   const int scy = SEEK_Y + SEEK_H / 2;
   if (seekable) {
@@ -881,7 +881,7 @@ inline void draw_remote(Ctx &c, const Model &m, int64_t now_epoch) {
 
   const char *const labels[4] = {"Back", "Home", m.app_button.empty() ? "App" : m.app_button.c_str(), "Play"};
   static const char *const icons[4] = {ICON_BACK, ICON_TV, ICON_MOVIE, ICON_PLAY_PAUSE};
-  static const Press keys[4] = {Press::KEY_BACK, Press::KEY_HOME, Press::KEY_INFUSE, Press::KEY_PLAY};
+  static const Press keys[4] = {Press::KEY_BACK, Press::KEY_HOME, Press::KEY_APP, Press::KEY_PLAY};
   for (int i = 0; i < 4; i++) {
     const int x = key_x(i);
     const bool down = p == keys[i];
@@ -1159,8 +1159,8 @@ inline void draw_update(Ctx &c, const Model &m) {
 
 inline void draw_screen(Ctx &c, const Model &m, const GrayImage &poster,
                         int64_t now_epoch, bool time_valid, int hour, int minute, const char *room,
-                        const char *name1, const char *name2, const char *infuse_label,
-                        const char *player = "Apple TV") {
+                        const char *name1, const char *name2,
+                        const char *player = "Android TV") {
   c.it.fill(c.paper);
   if (m.sleeping && m.in_setup()) return draw_setup_sleep(c, m);
   if (m.sleeping) return draw_asleep(c, m, room, time_valid, hour, minute);
@@ -1176,7 +1176,7 @@ inline void draw_screen(Ctx &c, const Model &m, const GrayImage &poster,
   draw_tiles(c, m, name1, name2, player);
   const Mode mode = m.mode();
   if (mode == Mode::OFF) {
-    draw_off(c);
+    draw_off(c, player);
   } else {
     draw_remote(c, m, now_epoch);
     draw_now(c, m, poster, now_epoch);
@@ -1185,8 +1185,8 @@ inline void draw_screen(Ctx &c, const Model &m, const GrayImage &poster,
 }
 
 struct Labels {
-  const char *room, *light_1, *light_2, *infuse;
-  const char *player = "Apple TV";   // the power tile's label
+  const char *room, *light_1, *light_2;
+  const char *player = "Android TV";   // the power tile's label
 };
 
 // The display lambda: draws the screen and records what it showed, so the
@@ -1194,8 +1194,7 @@ struct Labels {
 inline void render(Ctx &c, const GrayImage &poster, int64_t now_epoch, bool time_valid,
                    int hour, int minute, const Labels &l) {
   const auto &m = model();
-  draw_screen(c, m, poster, now_epoch, time_valid, hour, minute, l.room, l.light_1, l.light_2, l.infuse,
-              l.player);
+  draw_screen(c, m, poster, now_epoch, time_valid, hour, minute, l.room, l.light_1, l.light_2, l.player);
   auto &r = redraw();
   r.drawn_clock = time_valid ? hour * 60 + minute : -2;
   r.drawn_minute = m.mode() == Mode::PLAYING ? shown_minute(m, now_epoch) : -1;
@@ -1217,14 +1216,14 @@ enum Action {
   NONE = 0,
   LIGHT_1,
   LIGHT_2,
-  ATV_POWER,
+  TV_POWER,
   PLAY_PAUSE,
   SKIP_BACK,
   SKIP_FWD,
   SEEK,        // seek_to holds the target in seconds
   VOL_DOWN,
   VOL_UP,
-  OPEN_INFUSE,
+  OPEN_APP,
   TURN_ON,
   TAB_NOW,
   TAB_REMOTE,
@@ -1240,16 +1239,16 @@ enum Action {
   UPDATE_CLOSE,
 };
 
-// remote.send_command name for each pad action (Apple TV integration).
+// remote.send_command name for each pad action (Android TV Remote integration).
 inline const char *nav_command(Action a) {
   switch (a) {
-    case NAV_UP: return "up";
-    case NAV_DOWN: return "down";
-    case NAV_LEFT: return "left";
-    case NAV_RIGHT: return "right";
-    case NAV_SELECT: return "select";
-    case NAV_BACK: return "menu";
-    case NAV_HOME: return "home";
+    case NAV_UP: return "DPAD_UP";
+    case NAV_DOWN: return "DPAD_DOWN";
+    case NAV_LEFT: return "DPAD_LEFT";
+    case NAV_RIGHT: return "DPAD_RIGHT";
+    case NAV_SELECT: return "DPAD_CENTER";
+    case NAV_BACK: return "BACK";
+    case NAV_HOME: return "HOME";
     default: return nullptr;
   }
 }
@@ -1270,7 +1269,7 @@ inline Action hit(const Model &m, int x, int y, int64_t now_epoch, float &seek_t
   const int n = tile_count(m.light_count);
   for (int i = 0; i < n; i++)
     if (in(x, y, tile_x(i, n) - TILE_GAP / 2, TILE_Y - 6, tile_w(n) + TILE_GAP, TILE_H + 10))   // down to the tabs
-      return i == n - 1 ? ATV_POWER : (Action) (LIGHT_1 + i);
+      return i == n - 1 ? TV_POWER : (Action) (LIGHT_1 + i);
 
   const Mode mode = m.mode();
   if (mode != Mode::OFF && in(x, y, 0, VOL_Y - 8, W, VOL_H + 16)) {
@@ -1290,7 +1289,7 @@ inline Action hit(const Model &m, int x, int y, int64_t now_epoch, float &seek_t
   }
   if (in(x, y, 0, KEY_Y - 2, W, KEY_H + 8)) {
     const int i = std::max(0, std::min(3, (x - M + KEY_GAP / 2) / (KEY_W + KEY_GAP)));
-    static const Action keys[4] = {NAV_BACK, NAV_HOME, OPEN_INFUSE, PLAY_PAUSE};
+    static const Action keys[4] = {NAV_BACK, NAV_HOME, OPEN_APP, PLAY_PAUSE};
     return keys[i];
   }
   if (mode != Mode::PLAYING || !in(x, y, 0, NP_Y - 2, W, NP_H + 6)) return NONE;
@@ -1308,11 +1307,11 @@ inline Action hit(const Model &m, int x, int y, int64_t now_epoch, float &seek_t
   return NONE;
 }
 
-// New Apple TV state from HA.
-inline void set_atv_state(const std::string &state) {
+// New player state from HA.
+inline void set_player_state(const std::string &state) {
   auto &m = model();
   const Mode before = m.mode();
-  m.atv_state = state;
+  m.player_state = state;
   const Mode after = m.mode();
   if (after != Mode::PLAYING && before == Mode::PLAYING) clear_media(m, true);
   m.state_seen = true;
@@ -1336,8 +1335,8 @@ inline void optimistic_play_pause(int64_t now_epoch) {
     m.position = p;
     m.position_at = now_epoch;
   }
-  if (m.atv_state == "playing") m.atv_state = "paused";
-  else if (m.atv_state == "paused") m.atv_state = "playing";
+  if (m.player_state == "playing") m.player_state = "paused";
+  else if (m.player_state == "paused") m.player_state = "playing";
   request();
 }
 
@@ -1356,15 +1355,32 @@ inline float to_float(const std::string &v) {
   return end == v.c_str() ? NAN : f;
 }
 
+// The text the app key shows: the friendly name the setup page saved, or one
+// derived from the deep link ("https://www.youtube.com/tv" → "YouTube").
+inline std::string app_key_label(const std::string &app, const std::string &label) {
+  if (!label.empty()) return label;
+  std::string v = app;
+  const size_t scheme = v.find("://");
+  if (scheme != std::string::npos) v = v.substr(scheme + 3);
+  const size_t path = v.find_first_of("/?#");
+  if (path != std::string::npos) v = v.substr(0, path);
+  if (v.rfind("www.", 0) == 0) v = v.substr(4);
+  const size_t dot = v.find('.');
+  if (dot != std::string::npos) v = v.substr(0, dot);
+  if (v.empty()) return "App";
+  if (v[0] >= 'a' && v[0] <= 'z') v[0] = (char) (v[0] - 'a' + 'A');
+  return v;
+}
+
 /// One value, by key: what the firmware's HA subscriptions and settings feed in,
-/// and what the simulator's sc_set passes on. Keys: atv_state title series artist
+/// and what the simulator's sc_set passes on. Keys: player_state title series artist
 /// app season episode position duration volume position_at (ISO 8601) picture
 /// light0_state light1_state light0_brightness light1_brightness online usb
 /// battery sleeping net ip ha_paired device_name setup_url
 /// light_count light_icon0 light_icon1 configured app_button.
 inline void apply(const std::string &key, const std::string &v) {
   auto &m = model();
-  if (key == "atv_state") return set_atv_state(v);
+  if (key == "player_state") return set_player_state(v);
   if (key == "title") m.title = clean(v);
   else if (key == "series") m.series = clean(v);
   else if (key == "artist") m.artist = clean(v);
@@ -1463,12 +1479,12 @@ struct Actions {
   virtual ~Actions() = default;
   virtual void click() = 0;                       // audible tick
   virtual void toggle_light(int i) = 0;
-  virtual void atv_power(bool on) = 0;
+  virtual void tv_power(bool on) = 0;
   virtual void play_pause() = 0;
-  virtual void seek(float seconds) = 0;
+  virtual void seek(bool forward) = 0;   // hop ±10 s; the app picks the step
   virtual void remote_command(const char *command) = 0;
   virtual void volume(bool up) = 0;
-  virtual void open_infuse() = 0;
+  virtual void open_app() = 0;
   virtual void save_touch_cal(const TouchCal &cal) {}   // the firmware stores it
   virtual void sleep() {}                               // the AI button: deep sleep now
   virtual void install_update() {}                      // download and flash the newer release
@@ -1555,7 +1571,7 @@ inline Action handle_tap(int x, int y, int64_t now_epoch, Actions &act) {
       case NAV_SELECT: press_feedback(Press::OK); break;
       case NAV_BACK: press_feedback(Press::KEY_BACK); break;
       case NAV_HOME: press_feedback(Press::KEY_HOME); break;
-      case OPEN_INFUSE: press_feedback(Press::KEY_INFUSE); break;
+      case OPEN_APP: press_feedback(Press::KEY_APP); break;
       case PLAY_PAUSE: press_feedback(Press::KEY_PLAY); break;
       case SKIP_BACK: press_feedback(Press::KEY_REW); break;
       case SKIP_FWD: press_feedback(Press::KEY_FF); break;
@@ -1571,27 +1587,26 @@ inline Action handle_tap(int x, int y, int64_t now_epoch, Actions &act) {
       act.toggle_light(i);
       break;
     }
-    case ATV_POWER: act.atv_power(!m.atv_on()); break;
-    case TURN_ON: act.atv_power(true); break;
-    case OPEN_INFUSE: act.open_infuse(); break;
+    case TV_POWER: act.tv_power(!m.player_on()); break;
+    case TURN_ON: act.tv_power(true); break;
+    case OPEN_APP: act.open_app(); break;
     case PLAY_PAUSE:
       optimistic_play_pause(now_epoch);
       act.play_pause();
       break;
+    // Android TV has no absolute seek: the transport keys hop back or forward
+    // by whatever step the app uses (YouTube: 10 s). Show the expected hop at
+    // once; the TV's next report settles the bar.
     case SEEK:
-      optimistic_seek(seek_to, now_epoch);
-      act.seek(seek_to);
-      break;
     case SKIP_BACK:
-    case SKIP_FWD:
-      if (std::isnan(pos)) {
-        act.remote_command(a == SKIP_BACK ? "skip_backward" : "skip_forward");
-      } else {
-        const float to = a == SKIP_BACK ? std::max(0.0f, pos - SKIP_SECONDS) : pos + SKIP_SECONDS;
-        optimistic_seek(to, now_epoch);
-        act.seek(to);
-      }
+    case SKIP_FWD: {
+      const bool back = a == SKIP_BACK || (a == SEEK && seek_to < pos);
+      if (!std::isnan(pos))
+        optimistic_seek(back ? std::max(0.0f, pos - SKIP_SECONDS) : pos + SKIP_SECONDS, now_epoch);
+      if (a == SEEK) act.seek(!back);
+      else act.remote_command(back ? "MEDIA_REWIND" : "MEDIA_FAST_FORWARD");
       break;
+    }
     case VOL_DOWN: act.volume(false); break;
     case VOL_UP: act.volume(true); break;
     default:

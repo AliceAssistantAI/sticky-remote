@@ -53,11 +53,11 @@ common = ["online 1", "battery 78", "volume 0.4", "light0_state on", "light0_bri
 
 # Welcome: the Sticky while a film plays, and when nothing plays (Inter).
 for name, extra, with_poster in (
-        ("welcome-now", ["atv_state playing", "app Infuse", "title The Long Night", "position 3734", "duration 8040",
+        ("welcome-now", ["player_state playing", "app YouTube", "title The Long Night", "position 3734", "duration 8040",
                          "position_at 2026-10-26T18:00:00+00:00", "picture night"], True),
-        ("welcome-remote", ["atv_state idle", "app Infuse"], False)):
+        ("welcome-remote", ["player_state idle", "app YouTube"], False)):
     p, cmd = engine("inter")
-    cmd("labels Living room|Floor lamp|Ceiling|Open Infuse|Apple TV")
+    cmd("labels Living room|Floor lamp|Ceiling|Android TV")
     for c in common + extra:   # the state and the app first, as Home Assistant sends them
         cmd("set " + c)
     if with_poster:
@@ -68,8 +68,8 @@ for name, extra, with_poster in (
 # The screen with its top row left blank, for each typeface.
 for font_set in ("inter", "trmnl"):
     p, cmd = engine(font_set)
-    cmd("labels |||Open app|Player")
-    for c in common + ["atv_state idle"]:
+    cmd("labels |||Player")
+    for c in common + ["player_state idle"]:
         cmd("set " + c)
     frame(cmd, f"base-{font_set}", crop_top=True)
     p.kill()

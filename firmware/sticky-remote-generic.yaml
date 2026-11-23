@@ -6,14 +6,14 @@ substitutions:
   name_add_mac_suffix: "true"
   wifi_mode: setup
   ota_password: ""
-  setup_url: frankynov.ovh/sticky
+  setup_url: aliceassistantai.github.io/sticky-remote
   room_name: ""
   ha_base_url: ""
-  apple_tv: ""
-  apple_tv_remote: ""
+  tv_media_player: ""
+  tv_remote: ""
   player_name: Player
-  infuse_source: ""
-  infuse_label: ""
+  app_name: ""
+  app_label: ""
   light_1: ""
   light_1_name: ""
   light_1_icon: bulb

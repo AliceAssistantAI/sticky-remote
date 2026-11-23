@@ -1,4 +1,4 @@
-# Puts the setup page online (frankynov.ovh/sticky) when a release is
+# Puts the setup page online (GitHub Pages) when a release is
 # published, with that release's firmware: no more uploading by hand.
 #
 # The firmware image comes from the release and is checked against the

@@ -23,9 +23,9 @@ const remote_ui::Fonts &fonts() {
 }
 
 struct Labels {
-  std::string room = "Living room", light_1 = "Floor lamp", light_2 = "Ceiling", infuse = "Open Infuse", player = "Apple TV";
+  std::string room = "Living room", light_1 = "Floor lamp", light_2 = "Ceiling", player = "Android TV";
   remote_ui::Labels view() const {
-    return {room.c_str(), light_1.c_str(), light_2.c_str(), infuse.c_str(), player.c_str()};
+    return {room.c_str(), light_1.c_str(), light_2.c_str(), player.c_str()};
   }
 } g_labels;
 
@@ -56,12 +56,12 @@ struct CallbackActions : remote_ui::Actions {
   }
   void click() override { send("beep"); }
   void toggle_light(int i) override { send("toggle_light " + std::to_string(i)); }
-  void atv_power(bool on) override { send(on ? "atv_power on" : "atv_power off"); }
+  void tv_power(bool on) override { send(on ? "tv_power on" : "tv_power off"); }
   void play_pause() override { send("play_pause"); }
-  void seek(float s) override { send("seek " + std::to_string((int) s)); }
+  void seek(bool forward) override { send(forward ? "seek forward" : "seek back"); }
   void remote_command(const char *c) override { send(std::string("remote ") + c); }
   void volume(bool up) override { send(up ? "volume up" : "volume down"); }
-  void open_infuse() override { send("open_infuse"); }
+  void open_app() override { send("open_app"); }
   void sleep() override { send("sleep"); }
   void install_update() override { send("install_update"); }
 } g_actions;
@@ -131,12 +131,11 @@ int sc_font_load_fnt_text(int index, const char *text_c) {
   return 0;
 }
 
-void sc_set_labels(const char *room, const char *l1, const char *l2, const char *infuse, const char *player) {
+void sc_set_labels(const char *room, const char *l1, const char *l2, const char *player) {
   g_labels.player = player;
   g_labels.room = room;
   g_labels.light_1 = l1;
   g_labels.light_2 = l2;
-  g_labels.infuse = infuse;
   remote_ui::request(true);
 }
 
@@ -196,8 +195,8 @@ void sc_button(int button, int64_t now, sc_call_fn fn, void *ctx) {
 }
 
 const char *sc_action_name(int a) {
-  static const char *const names[] = {"NONE", "LIGHT_1", "LIGHT_2", "ATV_POWER", "PLAY_PAUSE", "SKIP_BACK",
-                                      "SKIP_FWD", "SEEK", "VOL_DOWN", "VOL_UP", "OPEN_INFUSE", "TURN_ON",
+  static const char *const names[] = {"NONE", "LIGHT_1", "LIGHT_2", "TV_POWER", "PLAY_PAUSE", "SKIP_BACK",
+                                      "SKIP_FWD", "SEEK", "VOL_DOWN", "VOL_UP", "OPEN_APP", "TURN_ON",
                                       "TAB_NOW", "TAB_REMOTE", "NAV_UP", "NAV_DOWN", "NAV_LEFT", "NAV_RIGHT",
                                       "NAV_SELECT", "NAV_BACK", "NAV_HOME", "UPDATE_OPEN", "UPDATE_INSTALL",
                                       "UPDATE_CLOSE"};

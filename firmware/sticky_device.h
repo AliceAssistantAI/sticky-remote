@@ -333,12 +333,11 @@ inline void forget() {
 
 // --- Labels and look -----------------------------------------------------------
 inline const remote_ui::Labels &labels() {
-  static remote_ui::Labels l{"", "", "", "", ""};
+  static remote_ui::Labels l{"", "", ""};
   const auto &s = settings();
   l.room = s.room.c_str();
   l.light_1 = s.light1_name.c_str();
   l.light_2 = s.light2_name.c_str();
-  l.infuse = s.app_label.c_str();
   l.player = s.player_name.empty() ? "Player" : s.player_name.c_str();
   return l;
 }
@@ -352,7 +351,7 @@ inline void apply_to_ui() {
   remote_ui::apply("light_icon0", s.light1_icon);
   remote_ui::apply("light_icon1", s.light2_icon);
   remote_ui::apply("configured", s.configured() ? "1" : "0");
-  remote_ui::apply("app_button", s.app);
+  remote_ui::apply("app_button", remote_ui::app_key_label(s.app, s.app_label));
   remote_ui::apply("sleep_clock", clock_on() ? "1" : "0");
 }
 
@@ -637,7 +636,7 @@ inline void subscribe(esphome::api::APIServer *api) {
   };
   // HA forwards in subscription order: the state and the app come first, since
   // they clear the details (remote_ui::clear_media) that follow them.
-  sub(s.player, nullptr, "atv_state");
+  sub(s.player, nullptr, "player_state");
   sub(s.player, "app_name", "app");
   sub(s.player, "media_title", "title");
   sub(s.player, "media_series_title", "series");
