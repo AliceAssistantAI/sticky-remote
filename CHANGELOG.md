@@ -3,6 +3,12 @@
 Each version's first list is what the Sticky shows on its update screen
 (short lines, plain characters); web/build.sh puts it in the update manifest.
 
+## 0.8.0
+
+- The remote drives an Android TV now, through the Android TV Remote integration in Home Assistant.
+- The app button opens any app the TV can launch; the setup page asks for its name.
+- Tapping the position bar hops ten seconds forward or back, since Android TV has no jump-to-position.
+
 ## 0.7.3
 
 - The AI button puts it to sleep again after it has dozed with the clock.

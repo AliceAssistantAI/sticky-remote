@@ -1,0 +1,94 @@
+# Builds the generic firmware on GitHub and publishes it as a release with
+# its images: this fork ships its own builds with no other machine involved.
+# Run it by hand from the Actions tab (Run workflow) when the version in
+# firmware/sticky-remote.yaml is bumped and CHANGELOG.md has its list.
+#
+# It compiles firmware/sticky-remote-generic.yaml, writes the two manifests
+# (the web wizard's factory manifest and the Sticky's OTA manifest) with the
+# real hashes, commits them so the release's tag carries them, publishes the
+# release v<version>, and asks Deploy the setup page to republish GitHub
+# Pages with these images.
+name: Build the firmware
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache the ESP-IDF toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.espidf
+            ~/.espressif
+            ~/.cache/pip
+          key: esphome-${{ hashFiles('firmware/*.yaml') }}
+          restore-keys: esphome-
+
+      - name: Install ESPHome
+        run: |
+          pip install --quiet esphome
+          esphome version
+
+      - name: Compile the generic firmware
+        run: esphome compile firmware/sticky-remote-generic.yaml
+
+      - name: Stage the images and the manifests
+        id: rel
+        env:
+          REL: ${{ github.server_url }}/${{ github.repository }}/releases
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n 's/^  firmware_version: "\(.*\)"/\1/p' firmware/sticky-remote.yaml)
+          BUILD=$(find firmware/.esphome/build -name firmware.factory.bin | head -1)
+          BUILD=${BUILD%/*}
+          FACTORY=$BUILD/firmware.factory.bin OTA=$BUILD/firmware.ota.bin
+          [ -f "$FACTORY" ] && [ -f "$OTA" ] || { echo "::error::no images under $BUILD"; exit 1; }
+          mkdir -p out
+          FACTORY_FILE=sticky-remote-$VERSION.factory.bin
+          OTA_FILE=sticky-remote-$VERSION.ota.bin
+          cp "$FACTORY" "out/$FACTORY_FILE"
+          cp "$OTA" "out/$OTA_FILE"
+          FACTORY_SHA=$(sha256sum "out/$FACTORY_FILE" | cut -d' ' -f1)
+          FACTORY_SIZE=$(stat -c%s "out/$FACTORY_FILE")
+          OTA_MD5=$(md5sum "out/$OTA_FILE" | cut -d' ' -f1)
+          python3 web/make_release_manifests.py "$VERSION" "out/$FACTORY_FILE" "out/$OTA_FILE" "$REL"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$FACTORY_SHA size=$FACTORY_SIZE md5=$OTA_MD5"
+
+      - name: Commit the manifests, tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.rel.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/firmware/manifest.json web/firmware/ota-manifest.json
+          git commit -m "Firmware v$VERSION: web and OTA manifests for the GitHub build"
+          git push origin "HEAD:${{ github.ref_name }}"
+          SHA=$(git rev-parse HEAD)
+          python3 web/release_notes.py "$VERSION" > /tmp/notes.md
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+            --title "v$VERSION" --notes-file /tmp/notes.md \
+            out/sticky-remote-$VERSION.factory.bin out/sticky-remote-$VERSION.ota.bin out/ota-manifest.json
+
+      - name: Publish the setup page with these images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.rel.outputs.version }}
+        run: gh workflow run deploy-site.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" -f tag="v$VERSION"
