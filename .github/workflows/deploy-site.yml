@@ -1,19 +1,20 @@
-# Puts the setup page online (GitHub Pages) when a release is
-# published, with that release's firmware: no more uploading by hand.
+# Publishes the setup page to GitHub Pages when a release is published,
+# with that release's firmware: no server, no FTP logins.
 #
-# The firmware image comes from the release and is checked against the
-# SHA-256 and size in web/firmware/manifest.json before anything is
-# uploaded. The page's own files come from the release's tag, or, for a run
-# by hand without a tag, from the branch it was started on: page changes go
-# online without a new release. Then manifest.json there must name the latest
-# release, so a branch with firmware that isn't released yet stops here.
+# The firmware image comes from the GitHub release and is checked against
+# the SHA-256 and size in web/firmware/manifest.json before anything is
+# published. The page's own files come from the release's tag, or, for a
+# run by hand without a tag, from the branch it was started on: page
+# changes go online without a new release. Then manifest.json there must
+# name the latest release, so a branch with firmware that isn't released
+# yet stops here.
 #
-# The server login lives only in this repository's secrets (Settings ›
-# Secrets and variables › Actions), set by the owner:
-#   SITE_URL       the server's address (ftp://… or sftp://…; uploads always go over SFTP)
-#   SITE_USER      the FTP/SFTP user
-#   SITE_PASSWORD  its password
-#   SITE_DIR       the page's folder, from the login's home, e.g. www/sticky
+# Updates for the Sticky itself come from GitHub Releases too: it reads
+# releases/latest/download/ota-manifest.json, and the OTA image is an
+# asset of the release.
+#
+# Pages needs "GitHub Actions" as its source (Settings › Pages). The
+# address is https://<owner>.github.io/sticky-remote/.
 #
 # Run it by hand from the Actions tab (Run workflow): with a tag, redeploys
 # that release as it was; empty, publishes the branch's page.
@@ -30,14 +31,19 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: deploy-site
+  group: github-pages
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Which release
         id: rel
@@ -73,34 +79,11 @@ jobs:
           sed -i 's/^ditto /cp -R /' web/stage.sh
           web/stage.sh
 
-      - name: Upload to the server
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          SITE_USER: ${{ secrets.SITE_USER }}
-          LFTP_PASSWORD: ${{ secrets.SITE_PASSWORD }}
-          SITE_DIR: ${{ secrets.SITE_DIR }}
-        run: |
-          for v in SITE_URL SITE_USER LFTP_PASSWORD SITE_DIR; do
-            [ -n "${!v}" ] || { echo "::error::Secret for $v is not set (see the top of this file)"; exit 1; }
-          done
-          sudo apt-get -qq update && sudo apt-get -qq install -y lftp > /dev/null
-          # Always encrypted: SFTP. An ftp:// address is tried over SFTP on the same
-          # host, then on OVH's ssh. name for it (ftp.clusterN… → ssh.clusterN…),
-          # with the same login. SFTP starts in the home folder, where FTP's root
-          # is: /www/sticky becomes www/sticky. The host key is accepted on first use.
-          HOST=$(printf '%s' "$SITE_URL" | sed -E 's#^[a-z]+://##; s#/.*$##')
-          DIR=${SITE_DIR#/}
-          CANDIDATES="$HOST"
-          case "$HOST" in ftp.*) CANDIDATES="$HOST ssh.${HOST#ftp.}" ;; esac
-          for H in $CANDIDATES; do
-            echo "Trying SFTP on the server (candidate $((++n)))"
-            if lftp --env-password -u "$SITE_USER" "sftp://$H" -e "
-                set sftp:auto-confirm yes; set net:max-retries 1; set net:timeout 20;
-                mirror --reverse --verbose build/upload/sticky '$DIR';
-                quit"; then
-              echo "Uploaded."
-              exit 0
-            fi
-          done
-          echo "::error::SFTP login failed on every candidate host"
-          exit 1
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/upload/sticky
+
+      - name: Publish
+        id: deployment
+        uses: actions/deploy-pages@v4
