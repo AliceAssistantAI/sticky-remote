@@ -8,8 +8,7 @@ the browser, with no tools to install.
 ![screens](design/screens.png)
 
 **Set one up:** open <https://aliceassistantai.github.io/sticky-remote/> in Chrome or Edge on a
-computer, plug the Sticky in over USB-C and follow the steps. `?demo` on that
-page runs the whole wizard without a Sticky or a Home Assistant.
+computer, plug the Sticky in over USB-C and follow the steps.
 
 **Installed it with a launcher app instead?** If the Sticky runs
 [Launcher](https://github.com/bmorcelli/Launcher) (or M5Burner), install

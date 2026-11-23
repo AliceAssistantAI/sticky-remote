@@ -1,20 +1,12 @@
 // Sticky Remote setup: install the firmware, set Wi-Fi, pick the player and
 // lights from Home Assistant, add the Sticky to HA. Five steps; each moves on
 // by itself once its job is done. A Sticky that's already set up gets a short
-// menu instead. Static page, no build step. ?demo runs it against a pretend
-// Sticky and Home Assistant.
+// menu instead. Static page, no build step.
 
-import { StickySerial, flash, DemoSticky, demoFlash } from "./sticky-serial.js";
-import { HAClient, DemoHA } from "./ha.js";
+import { StickySerial, flash } from "./sticky-serial.js";
+import { HAClient } from "./ha.js";
 import { renderRemote, renderImage, drawIcon } from "./device-preview.js";
 
-// ?demo: pretend Sticky and pretend Home Assistant. ?demo=sticky: pretend
-// Sticky with your real Home Assistant. ?demo=update: the pretend Sticky
-// already runs an older, set-up Sticky Remote. ?demo=reauth: after the
-// install, the pretend Home Assistant asks to confirm the Sticky's new key.
-const DEMO = new URLSearchParams(location.search).has("demo");
-const DEMO_MODE = new URLSearchParams(location.search).get("demo");
-const DEMO_HA = DEMO && DEMO_MODE !== "sticky";
 const STEPS = ["Your Sticky", "Wi-Fi", "Home Assistant", "Your remote", "Finish"];
 const WIFI = 1, HA = 2, REMOTE = 3, FINISH = 4;
 const ICONS = { bulb: "Bulb", ceiling: "Ceiling light", floor: "Floor lamp", star: "Star" };
@@ -139,7 +131,7 @@ const VIEWS = [
     const bindPort = () => $("#pick")?.addEventListener("click", connect);
 
     if (!S.port) {
-      const ok = DEMO || "serial" in navigator;
+      const ok = "serial" in navigator;
       return {
         html: `
           <div class="welcome">
@@ -163,7 +155,6 @@ const VIEWS = [
                   <li><b>Home Assistant address</b>: remembered in this browser only if you want, and you can forget it.</li>
                   <li><b>This website</b> only serves the page and the firmware file. Nothing you type is sent to it or to its author. No analytics, no cookies, no third-party scripts: the page's security policy makes the browser block anything else.</li>
                 </ul></details>
-              ${DEMO ? "" : `<p><a href="?demo">Try the demo first (no Sticky needed)</a></p>`}
             </div>
             <div class="hero">
               <figure><div class="device"><canvas id="hero-now" width="480" height="800" aria-label="The Sticky while a film plays"></canvas></div><figcaption>While a film plays</figcaption></figure>
@@ -577,7 +568,6 @@ const VIEWS = [
         if (i.ha?.connected) added();
         $("#skip").addEventListener("click", () => finish());
         $("#yes")?.addEventListener("click", () => finish());
-        if (DEMO) S.serial.pretendAdded?.();
         S.timers.push(setInterval(async () => {
           const n = await S.serial.info(1).catch(() => null);
           if (!n || S.finished || !$("#t-add")) return;   // answered after the page moved on
@@ -858,18 +848,13 @@ async function connect() {
   const status = $("#pick-status");
   try {
     await S.serial?.close();
-    if (DEMO) {
-      S.port = { demo: true };
-      S.serial = new DemoSticky({ installed: DEMO_MODE === "update", configured: DEMO_MODE === "update" });
-    } else {
-      const filters = $("#allports").checked ? [] : [{ usbVendorId: 0x1a86 }, { usbVendorId: 0x303a }];
-      S.port = await navigator.serial.requestPort({ filters });
-      S.serial = new StickySerial(S.port);
-      await S.serial.open();
-    }
+    const filters = $("#allports").checked ? [] : [{ usbVendorId: 0x1a86 }, { usbVendorId: 0x303a }];
+    S.port = await navigator.serial.requestPort({ filters });
+    S.serial = new StickySerial(S.port);
+    await S.serial.open();
     status.hidden = false; status.className = "note"; status.textContent = "Asking the Sticky…";
     S.info = await S.serial.info(3);
-    if (!S.info && !DEMO) await waitForLauncherBoot(status);
+    if (!S.info) await waitForLauncherBoot(status);
     S.connectedAt = Date.now();
     const i = S.info;
     S.wasConfigured = !!i?.configured;
@@ -880,6 +865,9 @@ async function connect() {
     // No Sticky Remote yet, or an older one that isn't set up: the installer.
     // Up to date and not set up: straight on. Set up: its menu.
     S.installPanel = !i || (!i.configured && newer(S.manifest?.version, i.fw));
+    // A set-up Sticky came here to be changed: straight into its settings.
+    // Back goes to its menu (update, Wi-Fi, reinstall).
+    if (i && i.configured && !S.installPanel) { startFlow("settings"); return; }
     if (i && !i.configured && !S.installPanel) return fwd();
     render();
   } catch (e) {
@@ -925,7 +913,7 @@ async function install() {
   try {
     phase.className = "note";
     let data = S.custom?.data || null;
-    if (!data && !DEMO) {
+    if (!data) {
       phase.textContent = "Downloading the firmware…";
       data = new Uint8Array(await (await fetch(`firmware/${S.manifest.file}`)).arrayBuffer());
       if (S.manifest.size && data.length !== S.manifest.size) throw new Error("The firmware download is incomplete. Reload the page and try again.");
@@ -934,12 +922,12 @@ async function install() {
     await S.serial.close();
     S.flashing = true;
     const opts = { eraseAll: S.eraseAll, onProgress: (p) => { bar.style.width = `${Math.round(p * 100)}%`; }, onLog: addLog };
-    try { if (DEMO) await demoFlash(opts); else await flash(S.port, data, opts); }
+    try { await flash(S.port, data, opts); }
     finally { S.flashing = false; }
     bar.style.width = "100%";
     phase.textContent = "Installed. Waiting for the Sticky to start…";
-    if (DEMO) { S.serial.finishFlash(S.custom?.version || S.manifest.version, S.eraseAll); }
-    else { S.serial = new StickySerial(S.port); await S.serial.open(); }
+    S.serial = new StickySerial(S.port);
+    await S.serial.open();
     S.info = await S.serial.waitForBoard(30000);
     if (!S.info) throw new Error("The Sticky didn't answer after installing. Unplug it, plug it back in, and connect it again.");
     S.installPanel = false; S.custom = null; S.pickFile = false;
@@ -958,20 +946,18 @@ async function install() {
 async function connectHA() {
   const h = S.ha;
   h.error = "";
-  const problem = DEMO_HA ? null : HAClient.problem(h.url);
+  const problem = HAClient.problem(h.url);
   if (problem) { h.error = problem; return render(); }
-  if (!h.token && !DEMO_HA) { h.error = "Paste a long-lived access token."; return render(); }
+  if (!h.token) { h.error = "Paste a long-lived access token."; return render(); }
   $("#hacheck").disabled = true; $("#hacheck").textContent = "Connecting…";
   try {
     h.client?.close();
-    const c = DEMO_HA ? new DemoHA() : new HAClient(h.url, h.token);
+    const c = new HAClient(h.url, h.token);
     await c.connect();
     const [states, cfg] = await Promise.all([c.states(), c.config()]);
     h.client = c; h.states = states; h.location = cfg.location_name || "Home Assistant";
-    if (DEMO_MODE === "reauth") c.pretendReflashed?.();
     h.manual = false;
-    if (DEMO_HA && !h.url) h.url = "https://demo.home-assistant.invalid";
-    if (h.remember && !DEMO_HA) localStorage.setItem("sticky.haURL", h.url);
+    if (h.remember) localStorage.setItem("sticky.haURL", h.url);
     if (!S.settings.ha_url) S.settings.ha_url = h.url.replace(/\/+$/, "");
     return fwd();   // connected: straight to the next step
   } catch (e) {
@@ -1014,7 +1000,7 @@ async function save() {
 }
 
 // --- Start ----------------------------------------------------------------------------
-// The logo and title go back to the start (keeping ?demo); not while writing
+// The logo and title go back to the start; not while writing
 // to the Sticky, which leaving would cut off halfway.
 document.querySelectorAll(".top a.home, .top a.home-logo").forEach((a) => {
   a.href = location.pathname + location.search;
@@ -1028,10 +1014,6 @@ document.querySelectorAll(".top a.home, .top a.home-logo").forEach((a) => {
 window.addEventListener("beforeunload", (e) => { if (S.flashing) e.preventDefault(); });
 
 (async () => {
-  if (DEMO) {
-    $("#demo-badge").hidden = false;
-    if (!DEMO_HA) $("#demo-badge").textContent = "Demo Sticky · real Home Assistant";
-  }
   try {
     S.manifest = await (await fetch("firmware/manifest.json", { cache: "no-store" })).json();
     $("#fw-line").textContent = `Sticky Remote ${S.manifest.version}`;
