@@ -22,7 +22,7 @@ const S = {
   flashing: false,        // writing to the Sticky: leaving the page now would cut it off
   wifi: { ssid: "", pass: "", change: false, busy: false },
   ha: { url: localStorage.getItem("sticky.haURL") || "", remember: !!localStorage.getItem("sticky.haURL"),
-        token: "", client: null, states: [], manual: false, location: "" },
+        token: localStorage.getItem("sticky.haToken") || "", client: null, states: [], manual: false, location: "" },
   settings: {
     player: "", remote: "", player_name: "", app: "", app_label: "",
     light1: "", light1_name: "", light1_icon: "bulb", light2: "", light2_name: "", light2_icon: "bulb",
@@ -151,7 +151,7 @@ const VIEWS = [
               <details><summary>Your data stays yours</summary>
                 <ul class="privacy-list">
                   <li><b>Wi-Fi password</b>: sent only to your Sticky, over the USB cable.</li>
-                  <li><b>Home Assistant token</b>: sent only to your Home Assistant, kept in memory and forgotten when you close this tab.</li>
+                  <li><b>Home Assistant token</b>: sent only to your Home Assistant. Kept in memory and forgotten when you close this tab — unless you tick “remember”, which stores it on this computer until you untick it.</li>
                   <li><b>Home Assistant address</b>: remembered in this browser only if you want, and you can forget it.</li>
                   <li><b>This website</b> only serves the page and the firmware file. Nothing you type is sent to it or to its author. No analytics, no cookies, no third-party scripts: the page's security policy makes the browser block anything else.</li>
                 </ul></details>
@@ -329,8 +329,8 @@ const VIEWS = [
         <label class="field"><span>Home Assistant address</span>
           <input type="url" id="haurl" placeholder="https://homeassistant.example.com" value="${esc(h.url)}">
           <small>The https address you use to open Home Assistant.</small></label>
-        <label class="field"><input type="checkbox" id="remember" ${h.remember ? "checked" : ""}> Remember this address in this browser
-          <small>Stored on this computer only (never the token). Untick to forget it.</small></label>
+        <label class="field"><input type="checkbox" id="remember" ${h.remember ? "checked" : ""}> Remember the address and token in this browser
+          <small>Stored on this computer only, never sent anywhere else, and the page connects by itself next time. Untick to forget both.</small></label>
         <label class="field"><span>Long-lived access token</span>
           <input type="password" id="token" value="${esc(h.token)}" autocomplete="off">
           <small>${h.url ? `<a href="${esc(h.url.replace(/\/+$/, ""))}/profile/security" target="_blank" rel="noopener">Create one in Home Assistant</a>` : "In Home Assistant: your profile › Security"}: “Create token”, from an admin account.</small></label>
@@ -342,12 +342,15 @@ const VIEWS = [
         ${actions(true, connected || h.manual, "Continue")}`,
       bind: () => {
         $("#haurl").addEventListener("input", (e) => { h.url = e.target.value.trim(); h.client = null; });
-        $("#token").addEventListener("input", (e) => { h.token = e.target.value.trim(); h.client = null; });
+        $("#token").addEventListener("input", (e) => {
+          h.token = e.target.value.trim(); h.client = null;
+          if (h.remember) localStorage.setItem("sticky.haToken", h.token);
+        });
         $("#hacheck").addEventListener("click", connectHA);
         $("#remember").addEventListener("change", (e) => {
           h.remember = e.target.checked;
-          if (h.remember && h.url) localStorage.setItem("sticky.haURL", h.url);
-          else localStorage.removeItem("sticky.haURL");
+          if (h.remember && h.url) { localStorage.setItem("sticky.haURL", h.url); localStorage.setItem("sticky.haToken", h.token); }
+          else { localStorage.removeItem("sticky.haURL"); localStorage.removeItem("sticky.haToken"); }
         });
         $("#manual").addEventListener("click", () => {
           h.manual = !h.manual; h.error = "";
@@ -359,6 +362,11 @@ const VIEWS = [
           if (!S.settings.ha_url) S.settings.ha_url = h.url.replace(/\/+$/, "");
           fwd();
         });
+        // Remembered credentials: don't sit on a Connect button nobody asked for.
+        if (!h.client && !S.haAutoTried && h.remember && h.url && h.token) {
+          S.haAutoTried = true;
+          connectHA();
+        }
       },
     };
   },
@@ -957,7 +965,7 @@ async function connectHA() {
     const [states, cfg] = await Promise.all([c.states(), c.config()]);
     h.client = c; h.states = states; h.location = cfg.location_name || "Home Assistant";
     h.manual = false;
-    if (h.remember) localStorage.setItem("sticky.haURL", h.url);
+    if (h.remember) { localStorage.setItem("sticky.haURL", h.url); localStorage.setItem("sticky.haToken", h.token); }
     if (!S.settings.ha_url) S.settings.ha_url = h.url.replace(/\/+$/, "");
     return fwd();   // connected: straight to the next step
   } catch (e) {
