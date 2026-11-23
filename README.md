@@ -260,11 +260,18 @@ newline-delimited JSON lines with `"sticky":"setup"`.
 
 - Waking takes a few seconds while Wi-Fi and the HA connection come back. A
   static IP (`manual_ip:` under `wifi:`) shortens it.
-- ±10 s seeks from the live position. Without one it falls back to
-  `remote.send_command skip_forward/backward`.
+- The ±10 s seek hops beside the playhead with `MEDIA_REWIND`/`MEDIA_FAST_FORWARD`;
+  Android TV has no jump-to-position, so how far it lands is up to the app.
 - Taps answer at once with the expected result, and HA's state update then
   confirms or corrects it. A command leaves the moment the screen is touched;
   the e-paper only shows it.
+
+## Credits
+
+This is a fork of [Frankynov/sticky-remote](https://github.com/Frankynov/sticky-remote) —
+the original Sticky Remote, which drives an Apple TV. This fork replaces the
+Apple TV integration with the Android TV Remote integration; the hardware,
+design and most of the firmware are Frankynov's work.
 
 ## License
 
