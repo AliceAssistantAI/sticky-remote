@@ -277,3 +277,7 @@ summary:hover { color: var(--ink); }
   .top .logo { width: 40px; height: 40px; }
   .bottom { padding-bottom: 20px; }
 }
+
+/* Scene checkboxes in the Lights card */
+.field .pick { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-weight: 400; }
+.field .pick input { margin: 0; }

@@ -3,6 +3,11 @@
 Each version's first list is what the Sticky shows on its update screen
 (short lines, plain characters); web/build.sh puts it in the update manifest.
 
+## 0.8.2
+
+- Press and hold a light: a card opens with on/off, a brightness slider (tap where you want it) and your scenes. A quick tap still just toggles.
+- The setup page picks the scenes: tick up to six from your Home Assistant; they reach the Sticky over USB.
+
 ## 0.8.1
 
 - Rebuilt with the ESPHome release the original firmware used (2026.10.2): the setup page over USB behaves like it does on a factory Sticky.

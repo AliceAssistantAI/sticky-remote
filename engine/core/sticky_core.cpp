@@ -64,6 +64,8 @@ struct CallbackActions : remote_ui::Actions {
   void open_app() override { send("open_app"); }
   void sleep() override { send("sleep"); }
   void install_update() override { send("install_update"); }
+  void set_brightness(int i, int pct) override { send("brightness " + std::to_string(i) + " " + std::to_string(pct)); }
+  void turn_scene(const std::string &entity) override { send("scene " + entity); }
 } g_actions;
 
 }  // namespace
@@ -168,7 +170,11 @@ int sc_touch(int rx, int ry, int64_t now, sc_call_fn fn, void *ctx) {
   return (int) remote_ui::handle_touch(rx, ry, rx, ry, now, g_actions);
 }
 
-void sc_release(void) { remote_ui::touch_released(); }
+void sc_release(sc_call_fn fn, void *ctx) {
+  g_actions.fn = fn;
+  g_actions.ctx = ctx;
+  remote_ui::touch_released(g_actions);
+}
 
 void sc_hold_tick(sc_call_fn fn, void *ctx) {
   g_actions.fn = fn;
@@ -199,7 +205,8 @@ const char *sc_action_name(int a) {
                                       "SKIP_FWD", "SEEK", "VOL_DOWN", "VOL_UP", "OPEN_APP", "TURN_ON",
                                       "TAB_NOW", "TAB_REMOTE", "NAV_UP", "NAV_DOWN", "NAV_LEFT", "NAV_RIGHT",
                                       "NAV_SELECT", "NAV_BACK", "NAV_HOME", "UPDATE_OPEN", "UPDATE_INSTALL",
-                                      "UPDATE_CLOSE"};
+                                      "UPDATE_CLOSE", "LIGHT_CLOSE", "LIGHT_POWER",
+                                      "LIGHT_BRIGHT", "LIGHT_SCENE"};
   return a >= 0 && a < (int) (sizeof names / sizeof *names) ? names[a] : "?";
 }
 

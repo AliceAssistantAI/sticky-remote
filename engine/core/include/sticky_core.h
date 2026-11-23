@@ -31,7 +31,7 @@ void sc_set_labels(const char *room, const char *light_1, const char *light_2, c
 /// Feeds one Home Assistant value, as the firmware's on_value handlers do. Keys:
 /// player_state title series artist app season episode position duration volume
 /// position_at (ISO 8601) picture light0_state light1_state light0_brightness
-/// light1_brightness online usb battery sleeping. Use "None" for absent.
+/// light1_brightness online usb battery sleeping scenes. Use "None" for absent.
 void sc_set(const char *key, const char *value);
 /// Artwork downloaded (8-bit grayscale, row-major). NULL clears it.
 void sc_set_poster(const uint8_t *gray, int width, int height);
@@ -48,7 +48,7 @@ void sc_button(int button, int64_t now_epoch, sc_call_fn fn, void *context);
 int sc_touch(int raw_x, int raw_y, int64_t now_epoch, sc_call_fn fn, void *context);
 /// The finger left the screen (ends hold-to-repeat), and the firmware's 20 ms
 /// tick that repeats a held arrow or volume end.
-void sc_release(void);
+void sc_release(sc_call_fn fn, void *context);
 void sc_hold_tick(sc_call_fn fn, void *context);
 /// Shows the touch calibration screen (the firmware: hold Down for 3 s).
 void sc_calibrate(void);

@@ -61,12 +61,13 @@ namespace sticky {
 static const char *const TAG = "sticky";
 constexpr int PROTOCOL = 1;
 // What this firmware's USB protocol can do beyond version 1, for the setup page.
-static const char *const CAPS[] = {"scan", "touch_sound", "sleep_after", "sleep_clock", "unpair"};
+static const char *const CAPS[] = {"scan", "touch_sound", "sleep_after", "sleep_clock", "unpair", "scenes"};
 
 struct Settings {
   std::string player, remote, player_name, app, app_label;
   std::string light1, light1_name, light1_icon, light2, light2_name, light2_icon;
   std::string room, ha_url, font_set;  // font_set: "inter" or "trmnl"
+  std::string scenes;  // the light dialog's list, "scene.x|Name,..." (its own preference)
   bool configured() const { return !player.empty() || !light1.empty(); }
   int light_count() const { return light2.empty() ? 1 : 2; }
 };
@@ -118,8 +119,17 @@ inline void load() {
     STICKY_FIELDS(X)
 #undef X
   }
+  ScenesStored sc{};
+  if (scenes_pref().load(&sc)) s.scenes = sc.text;
   ESP_LOGI(TAG, "settings: %s, player=%s light1=%s light2=%s", stored_present() ? "stored" : "defaults",
            s.player.c_str(), s.light1.c_str(), s.light2.c_str());
+}
+
+// --- Scenes (its own preference: the settings' stored layout stays as it was) ---
+struct ScenesStored { char text[220]; };
+inline esphome::ESPPreferenceObject &scenes_pref() {
+  static esphome::ESPPreferenceObject p = esphome::global_preferences->make_preference<ScenesStored>(0x534B5343, true);
+  return p;
 }
 
 inline bool save(const Settings &s) {
@@ -128,6 +138,9 @@ inline bool save(const Settings &s) {
 #define X(f) copy_out(st.f, sizeof st.f, s.f);
   STICKY_FIELDS(X)
 #undef X
+  ScenesStored sc{};
+  copy_out(sc.text, sizeof sc.text, s.scenes);
+  scenes_pref().save(&sc);
   const bool ok = pref().save(&st) && esphome::global_preferences->sync();
   if (ok) stored_present() = true;
   return ok;
@@ -327,6 +340,8 @@ inline bool save_touch_cal(const remote_ui::TouchCal &c) {
 inline void forget() {
   Stored st{};
   pref().save(&st);
+  ScenesStored none{};
+  scenes_pref().save(&none);
   esphome::global_preferences->sync();
   stored_present() = false;
 }
@@ -350,6 +365,7 @@ inline void apply_to_ui() {
   remote_ui::apply("light_count", s.light_count() == 1 ? "1" : "2");
   remote_ui::apply("light_icon0", s.light1_icon);
   remote_ui::apply("light_icon1", s.light2_icon);
+  remote_ui::apply("scenes", s.scenes);
   remote_ui::apply("configured", s.configured() ? "1" : "0");
   remote_ui::apply("app_button", remote_ui::app_key_label(s.app, s.app_label));
   remote_ui::apply("sleep_clock", clock_on() ? "1" : "0");
@@ -708,6 +724,7 @@ inline std::string info(const char *event) {
 #define X(f) st[#f] = settings().f;
     STICKY_FIELDS(X)
 #undef X
+    st["scenes"] = settings().scenes;
     st["touch_sound"] = SOUND_NAMES[sound()];
     st["sleep_after"] = SLEEP_NAMES[sleep_choice()];
     st["sleep_clock"] = clock_on() ? "on" : "off";
@@ -846,6 +863,7 @@ inline void handle(const std::string &line) {
 #define X(f) if (in[#f].is<const char *>()) s.f = in[#f].as<const char *>();
       STICKY_FIELDS(X)
 #undef X
+      if (in["scenes"].is<const char *>()) s.scenes = in["scenes"].as<const char *>();
     }
     JsonObject wifi = doc["wifi"];
     if (!wifi.isNull() && wifi["ssid"].is<const char *>()) {

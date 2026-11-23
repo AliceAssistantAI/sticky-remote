@@ -135,6 +135,8 @@ struct Model {
   bool usb = false;
   bool sleep_clock = true;        // asleep on battery: a clock that ticks every minute
   bool asleep_clock = false;      // the asleep face shows the clock (sleep_logic::shows_clock, set on falling asleep)
+  int light_panel = -1;             // the light dialog: which tile opened it, -1 while closed
+  std::string scenes;               // "scene.tv|Movie night,scene.all|All off" (the setup page picks them)
   // Firmware updates from the GitHub release (the firmware's update entity).
   std::string fw_version;         // running
   std::string update_version;     // newer one available, or empty
@@ -1157,6 +1159,110 @@ inline void draw_update(Ctx &c, const Model &m) {
   c.it.print(W / 2, UPD_CLOSE_Y + UPD_BTN_H / 2, c.f.t26, c.ink, TextAlign::CENTER, "Not now");
 }
 
+// --- Light dialog ------------------------------------------------------------
+// Press and hold a light tile: a Home Assistant-style card with a brightness
+// slider and the scenes the setup page picked. The slider takes the tap's x
+// (e-paper: a drag would cost one refresh per event), scenes are plain rows.
+constexpr uint32_t LIGHT_HOLD_MS = 600;
+constexpr int MAX_SCENES = 6;
+constexpr int LP_X = 40, LP_Y = 150, LP_PAD = 26;
+constexpr int LP_SLIDER_H = 24, LP_ROW_H = 56, LP_ROW_GAP = 10;
+
+struct SceneRow { std::string id, name; };
+
+/// "scene.a|Movie night,scene.b|Reading" into rows; a bare id shows itself.
+inline int parse_scenes(const std::string &s, SceneRow (*rows)[MAX_SCENES]) {
+  int n = 0;
+  size_t i = 0;
+  while (n < MAX_SCENES && i < s.size()) {
+    size_t comma = s.find(',', i);
+    if (comma == std::string::npos) comma = s.size();
+    const size_t bar = s.find('|', i);
+    SceneRow row;
+    if (bar != std::string::npos && bar < comma) {
+      row.id = s.substr(i, bar - i);
+      row.name = s.substr(bar + 1, comma - bar - 1);
+    } else {
+      row.id = s.substr(i, comma - i);
+      row.name = row.id;
+    }
+    if (!row.id.empty() && !row.name.empty()) (*rows)[n++] = row;
+    i = comma + 1;
+  }
+  return n;
+}
+
+struct LightPanel {
+  int x0, y0, x1, y1;        // the card
+  int px0, py0, pw, ph;      // the power button
+  int cx0, cy0, cw, ch;      // the close mark
+  int sx0, sx1, sy;          // the slider track
+  int row_y0;                // the first scene row
+  int n_scenes;
+};
+
+inline LightPanel light_panel(const Model &m) {
+  SceneRow rows[MAX_SCENES];
+  LightPanel p{};
+  p.n_scenes = parse_scenes(m.scenes, &rows);
+  p.x0 = LP_X; p.x1 = W - LP_X; p.y0 = LP_Y;
+  p.px0 = p.x0 + LP_PAD; p.py0 = p.y0 + 20; p.pw = 64; p.ph = 52;
+  p.cx0 = p.x1 - LP_PAD - 52; p.cy0 = p.y0 + 20; p.cw = 52; p.ch = 52;
+  p.sx0 = p.x0 + LP_PAD; p.sx1 = p.x1 - LP_PAD; p.sy = p.y0 + 118;
+  p.row_y0 = p.sy + LP_SLIDER_H + 62;
+  p.y1 = p.n_scenes ? p.row_y0 + p.n_scenes * (LP_ROW_H + LP_ROW_GAP) - LP_ROW_GAP + LP_PAD
+                    : p.sy + LP_SLIDER_H + 74;
+  return p;
+}
+
+/// The light dialog over the remote: name, power, close, brightness, scenes.
+inline void draw_light_panel(Ctx &c, const Model &m, const char *name) {
+  const LightPanel p = light_panel(m);
+  const auto &l = m.lights[m.light_panel];
+  c.it.fill(c.paper);
+  c.it.rectangle(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0, c.ink);
+  // Head: light name, power, close.
+  print_fit(c, p.px0 + p.pw + 20, p.py0 + p.ph / 2, c.f.t26, c.ink, TextAlign::CENTER_LEFT,
+            (name && *name) ? name : "Light", p.cx0 - p.px0 - p.pw - 40);
+  c.it.rectangle(p.px0, p.py0, p.pw, p.ph, c.ink);
+  c.it.print(p.px0 + p.pw / 2, p.py0 + p.ph / 2, c.f.t26, c.ink, TextAlign::CENTER,
+             l.on() ? ICON_BULB_ON : ICON_BULB_OFF);
+  c.it.rectangle(p.cx0, p.cy0, p.cw, p.ch, c.ink);
+  for (int k = 0; k < 8; k++) {   // an X drawn from blocks: no glyph needed
+    c.it.filled_rectangle(p.cx0 + 15 + k * 3, p.cy0 + 15 + k * 3, 4, 4, c.ink);
+    c.it.filled_rectangle(p.cx0 + 33 - k * 3, p.cy0 + 15 + k * 3, 4, 4, c.ink);
+  }
+  // Brightness: value and a track with a handle; a tap sets it.
+  const int pct = l.percent();
+  c.it.print(p.sx0, p.sy - 26, c.f.t20, c.ink, TextAlign::CENTER_LEFT, "Brightness");
+  if (pct >= 0) {
+    char buf[16];
+    snprintf(buf, sizeof buf, "%d%%", pct);
+    c.it.print(p.sx1, p.sy - 26, c.f.t20, c.ink, TextAlign::CENTER_RIGHT, buf);
+  }
+  const int fill_w = pct < 0 ? 0 : (pct * (p.sx1 - p.sx0 - 4)) / 100;
+  c.it.rectangle(p.sx0, p.sy, p.sx1 - p.sx0, LP_SLIDER_H, c.ink);
+  if (fill_w > 0) c.it.filled_rectangle(p.sx0 + 2, p.sy + 2, fill_w, LP_SLIDER_H - 4, c.ink);
+  const int hx = std::max(p.sx0 + 16, std::min(p.sx0 + 2 + fill_w, p.sx1 - 16));   // the handle stays on the track
+  c.it.filled_circle(hx, p.sy + LP_SLIDER_H / 2, 15, c.ink);
+  c.it.filled_circle(hx, p.sy + LP_SLIDER_H / 2, 9, c.paper);
+  // Scenes.
+  SceneRow rows[MAX_SCENES];
+  const int n = parse_scenes(m.scenes, &rows);
+  if (n) {
+    c.it.print(p.x0 + LP_PAD, p.row_y0 - 30, c.f.t20, c.ink, TextAlign::CENTER_LEFT, "Scenes");
+    for (int i = 0; i < n; i++) {
+      const int ry = p.row_y0 + i * (LP_ROW_H + LP_ROW_GAP);
+      c.it.rectangle(p.x0 + LP_PAD, ry, p.x1 - p.x0 - 2 * LP_PAD, LP_ROW_H, c.ink);
+      print_fit(c, p.x0 + LP_PAD + 22, ry + LP_ROW_H / 2, c.f.t22, c.ink, TextAlign::CENTER_LEFT,
+                rows[i].name, p.x1 - p.x0 - 2 * LP_PAD - 32);
+    }
+  } else {
+    print_fit(c, p.sx0, p.sy + 58, c.f.t20, c.ink, TextAlign::CENTER_LEFT,
+              "No scenes yet - pick them on the setup page", p.sx1 - p.sx0);
+  }
+}
+
 inline void draw_screen(Ctx &c, const Model &m, const GrayImage &poster,
                         int64_t now_epoch, bool time_valid, int hour, int minute, const char *room,
                         const char *name1, const char *name2,
@@ -1182,6 +1288,7 @@ inline void draw_screen(Ctx &c, const Model &m, const GrayImage &poster,
     draw_now(c, m, poster, now_epoch);
     draw_volume(c, m);
   }
+  if (m.light_panel >= 0) draw_light_panel(c, m, m.light_panel == 0 ? name1 : name2);
 }
 
 struct Labels {
@@ -1237,6 +1344,10 @@ enum Action {
   UPDATE_OPEN,      // the status bar, when an update is available
   UPDATE_INSTALL,
   UPDATE_CLOSE,
+  LIGHT_CLOSE,      // the light dialog: tap its close mark or outside the card
+  LIGHT_POWER,      // the dialog's on/off button
+  LIGHT_BRIGHT,     // seek_to: the slider's 0..1 position
+  LIGHT_SCENE,      // seek_to: the scene row
 };
 
 // remote.send_command name for each pad action (Android TV Remote integration).
@@ -1257,6 +1368,24 @@ inline bool in(int x, int y, int x0, int y0, int w, int h) {
   return x >= x0 && x < x0 + w && y >= y0 && y < y0 + h;
 }
 
+inline Action hit_light_panel(const Model &m, int x, int y, float &seek_to) {
+  const LightPanel p = light_panel(m);
+  if (!in(x, y, p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0)) return LIGHT_CLOSE;   // a tap beside the card closes it
+  if (in(x, y, p.cx0, p.cy0, p.cw, p.ch)) return LIGHT_CLOSE;
+  if (in(x, y, p.px0, p.py0, p.pw, p.ph)) return LIGHT_POWER;
+  if (in(x, y, p.sx0, p.sy - 22, p.sx1 - p.sx0, LP_SLIDER_H + 44)) {
+    const float f = (float) (x - p.sx0) / (float) (p.sx1 - p.sx0);
+    seek_to = std::max(0.f, std::min(1.f, f));
+    return LIGHT_BRIGHT;
+  }
+  for (int i = 0; i < p.n_scenes; i++)
+    if (in(x, y, p.x0 + LP_PAD, p.row_y0 + i * (LP_ROW_H + LP_ROW_GAP), p.x1 - p.x0 - 2 * LP_PAD, LP_ROW_H)) {
+      seek_to = (float) i;
+      return LIGHT_SCENE;
+    }
+  return NONE;
+}
+
 inline Action hit(const Model &m, int x, int y, int64_t now_epoch, float &seek_to) {
   if (m.in_setup()) return NONE;
   if (m.update_prompt) {
@@ -1265,6 +1394,7 @@ inline Action hit(const Model &m, int x, int y, int64_t now_epoch, float &seek_t
     if (in(x, y, M + 30, UPD_CLOSE_Y - 10, W - 2 * M - 60, UPD_BTN_H + 20)) return UPDATE_CLOSE;
     return NONE;
   }
+  if (m.light_panel >= 0) return hit_light_panel(m, x, y, seek_to);   // the dialog takes the whole screen
   if (!m.update_version.empty() && y < TILE_Y - 6) return UPDATE_OPEN;
   const int n = tile_count(m.light_count);
   for (int i = 0; i < n; i++)
@@ -1377,7 +1507,7 @@ inline std::string app_key_label(const std::string &app, const std::string &labe
 /// app season episode position duration volume position_at (ISO 8601) picture
 /// light0_state light1_state light0_brightness light1_brightness online usb
 /// battery sleeping net ip ha_paired device_name setup_url
-/// light_count light_icon0 light_icon1 configured app_button.
+/// light_count light_icon0 light_icon1 configured app_button scenes.
 inline void apply(const std::string &key, const std::string &v) {
   auto &m = model();
   if (key == "player_state") return set_player_state(v);
@@ -1399,11 +1529,13 @@ inline void apply(const std::string &key, const std::string &v) {
   else if (key == "light1_state") m.lights[1].state = v;
   else if (key == "light0_brightness") m.lights[0].brightness = to_float(v);
   else if (key == "light1_brightness") m.lights[1].brightness = to_float(v);
+  else if (key == "scenes") m.scenes = v;
   else if (key == "online") m.online = v == "1";
   else if (key == "usb") m.usb = v == "1";
   else if (key == "sleeping") {   // the simulator and design renders (the firmware's go_to_sleep sets these itself)
     m.sleeping = v == "1";
     m.asleep_clock = m.sleeping && m.sleep_clock;
+    if (m.sleeping) m.light_panel = -1;
     return request(true);
   } else if (key == "battery") {
     const float x = to_float(v);
@@ -1488,6 +1620,8 @@ struct Actions {
   virtual void save_touch_cal(const TouchCal &cal) {}   // the firmware stores it
   virtual void sleep() {}                               // the AI button: deep sleep now
   virtual void install_update() {}                      // download and flash the newer release
+  virtual void set_brightness(int i, int pct) {}        // the dialog's slider, 0..100 (0: off)
+  virtual void turn_scene(const std::string &entity) {} // a scene row of the dialog
 };
 
 inline Actions *&actions() {
@@ -1518,7 +1652,17 @@ inline bool repeats(Action a) {
 }
 
 /// The finger left the screen.
-inline void touch_released() { hold().action = NONE; }
+inline void touch_released(Actions &act) {
+  auto &h = hold();
+  const Action a = h.action;
+  const bool quick = (a == LIGHT_1 || a == LIGHT_2) && esphome::millis() - h.since < LIGHT_HOLD_MS;
+  h.action = NONE;
+  if (!quick) return;
+  const int i = a == LIGHT_1 ? 0 : 1;
+  act.click();
+  optimistic_toggle_light(i);
+  act.toggle_light(i);
+}
 
 /// Call often while a finger may be down (the firmware: every 20 ms).
 inline void hold_tick(Actions &act) {
@@ -1527,6 +1671,15 @@ inline void hold_tick(Actions &act) {
   const uint32_t now = esphome::millis();
   if (now - h.since > HOLD_MAX_MS || model().sleeping) {   // a release that never came
     h.action = NONE;
+    return;
+  }
+  if (h.action == LIGHT_1 || h.action == LIGHT_2) {        // a held light opens the dialog
+    if (now - h.since >= LIGHT_HOLD_MS) {
+      model().light_panel = h.action == LIGHT_1 ? 0 : 1;
+      h.action = NONE;
+      act.click();
+      request(true);
+    }
     return;
   }
   if (now - h.since < HOLD_START_MS || now - h.last < HOLD_EVERY_MS) return;
@@ -1560,6 +1713,45 @@ inline Action handle_tap(int x, int y, int64_t now_epoch, Actions &act) {
     request(true);
     return a;
   }
+  // While the dialog is open everything hit() returned belongs to it.
+  if (m.light_panel >= 0) {
+    act.click();
+    switch (a) {
+      case LIGHT_BRIGHT: {
+        int pct = (int) lroundf(seek_to * 100.f);
+        if (pct > 0 && pct < 5) pct = 5;   // the ends mean off and full; in between never rounds to zero
+        auto &l = m.lights[m.light_panel];
+        if (pct <= 0) l.state = "off";
+        else { l.state = "on"; l.brightness = (float) pct * 2.55f; }   // HA echoes the exact value a moment later
+        act.set_brightness(m.light_panel, pct);
+        request();
+        break;
+      }
+      case LIGHT_SCENE: {
+        SceneRow rows[MAX_SCENES];
+        const int n = parse_scenes(m.scenes, &rows);
+        const int i = (int) seek_to;
+        if (i >= 0 && i < n) { act.turn_scene(rows[i].id); m.light_panel = -1; }
+        request(true);
+        break;
+      }
+      case LIGHT_POWER:
+        optimistic_toggle_light(m.light_panel);
+        act.toggle_light(m.light_panel);
+        break;
+      case LIGHT_CLOSE:
+        m.light_panel = -1;
+        request(true);
+        break;
+      default: break;
+    }
+    return a;
+  }
+  // A light tile decides on release: quick tap toggles (touch_released), hold opens the dialog (hold_tick).
+  if (a == LIGHT_1 || a == LIGHT_2) {
+    hold() = Hold{a, esphome::millis(), 0};
+    return a;
+  }
   if (repeats(a)) hold() = Hold{a, esphome::millis(), esphome::millis()};
   act.click();
   if (m.mode() != Mode::OFF) {
@@ -1580,13 +1772,6 @@ inline Action handle_tap(int x, int y, int64_t now_epoch, Actions &act) {
   }
   const float pos = live_position(m, now_epoch);
   switch (a) {
-    case LIGHT_1:
-    case LIGHT_2: {
-      const int i = a == LIGHT_1 ? 0 : 1;
-      optimistic_toggle_light(i);
-      act.toggle_light(i);
-      break;
-    }
     case TV_POWER: act.tv_power(!m.player_on()); break;
     case TURN_ON: act.tv_power(true); break;
     case OPEN_APP: act.open_app(); break;

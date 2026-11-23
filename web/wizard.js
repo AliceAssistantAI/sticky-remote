@@ -27,6 +27,7 @@ const S = {
     player: "", remote: "", player_name: "", app: "", app_label: "",
     light1: "", light1_name: "", light1_icon: "bulb", light2: "", light2_name: "", light2_icon: "bulb",
     room: "", ha_url: "", font_set: "inter", touch_sound: "quiet", sleep_after: "3", sleep_clock: "on",
+    scenes: "",   // the light dialog's list: "scene.x|Name,..." (up to 6)
   },
   timers: [],
   attn: null,           // Home Assistant's side of the pairing (haAttention)
@@ -396,6 +397,11 @@ const VIEWS = [
         ${s[k] ? `<div class="light-opts">${text(`${k}_name`, "Name on the tile")}${icons(`${k}_icon`)}</div>` : ""}
         ${n === 2 ? `<button class="link" id="drop-light">Remove the second light</button>` : ""}</div>`;
     };
+    const sceneList = list("scene");
+    const chosen = (s.scenes || "").split(",").map((t) => t.split("|")[0]).filter(Boolean);
+    const scenePicker = (manual || !sceneList.length)
+      ? `<input type="text" data-k="scenes" placeholder="scene.movie_night|Movie night, scene.all_off|All off" value="${esc(s.scenes)}">`
+      : sceneList.slice(0, 8).map((e) => `<label class="pick"><input type="checkbox" data-scene="${esc(e.entity_id)}" data-name="${esc(name(e))}" ${chosen.includes(e.entity_id) ? "checked" : ""}> ${esc(name(e))}</label>`).join("");
     const sources = S.ha.states.find((e) => e.entity_id === s.player)?.attributes?.source_list || [];
     const two = !!s.light2 || S.twoLights;
     return {
@@ -423,6 +429,9 @@ const VIEWS = [
               <h3>Lights</h3>
               ${light(1)}
               ${two ? light(2) : s.light1 ? `<button class="link" id="add-light">+ Add a second light</button>` : ""}
+              ${s.light1 && (manual || has("scenes")) ? `<div class="field"><span>Scenes</span>
+                ${scenePicker}
+                <small>Press and hold a light on the Sticky: a brightness slider and these scenes open up.</small></div>` : ""}
             </section>
             <section class="card">
               <h3>Look and sound</h3>
@@ -471,6 +480,11 @@ const VIEWS = [
         $("#use-ha")?.addEventListener("click", () => { S.skipped.delete(HA); go(HA); });
         $("#add-light")?.addEventListener("click", () => { S.twoLights = true; render(); });
         $("#drop-light")?.addEventListener("click", () => { S.twoLights = false; s.light2 = ""; s.light2_name = ""; render(); });
+        document.querySelectorAll("[data-scene]").forEach((el) => el.addEventListener("change", () => {
+          const on = [];
+          document.querySelectorAll("[data-scene]").forEach((x) => { if (x.checked) on.push(`${x.dataset.scene}|${x.dataset.name}`); });
+          s.scenes = on.slice(0, 6).join(",");
+        }));
         document.querySelectorAll("[data-k]").forEach((el) => {
           el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
             const k = el.dataset.k;

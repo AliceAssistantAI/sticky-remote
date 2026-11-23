@@ -24,7 +24,7 @@ open the setup page, connect the Sticky over USB for the settings, and pick
 
 | Area | What it does | Home Assistant |
 |---|---|---|
-| Top tiles | One or two lights (toggle, brightness) and the player's power | `light.toggle`, `remote.turn_on/off` |
+| Top tiles | One or two lights — tap toggles, press and hold opens a brightness slider and your scenes — and the player's power | `light.toggle`, `light.turn_on`, `scene.turn_on`, `remote.turn_on/off` |
 | Pad | ↑ ↓ ← → and OK, with on-screen feedback. Hold an arrow to repeat it | `remote.send_command` `DPAD_UP`/`DPAD_DOWN`/`DPAD_LEFT`/`DPAD_RIGHT`/`DPAD_CENTER` |
 | Keys | Back, Home, the app button (e.g. YouTube), Play/Pause | `remote.send_command` `BACK`/`HOME`, `remote.turn_on` with the app name, `media_play_pause` |
 | What's playing | A small artwork (dithered), title, series/episode or artist, app | `media_player` attributes |
@@ -218,7 +218,7 @@ newline-delimited JSON lines with `"sticky":"setup"`.
   `{"sticky":"setup","cmd":"calibrate"}` and `{"sticky":"setup","cmd":"touch_reset"}`.
   The info line's `touch` object gives the map in use and its source.
 - Setting fields: `player remote player_name app app_label light1 light1_name
-  light1_icon light2 light2_name light2_icon room ha_url font_set`. Icons are
+  light1_icon light2 light2_name light2_icon scenes room ha_url font_set`. Icons are
   `bulb`, `ceiling`, `floor` or `star`; `font_set` is `inter` or `trmnl`.
   `touch_sound` (`off`, `quiet`, `normal`), `sleep_after` (`1`, `3`, `10`,
   `30` minutes, or `never`) and `sleep_clock` (`on`, `off`) are accepted in

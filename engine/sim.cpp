@@ -97,7 +97,9 @@ int main(int argc, char **argv) {
       const int a = sc_touch(x, y, now, collect, &calls);
       reply = std::string("{\"action\":\"") + sc_action_name(a) + "\",\"calls\":" + calls_json(calls) + "}";
     } else if (cmd == "release") {
-      sc_release();
+      std::vector<std::string> calls;
+      sc_release(collect, &calls);
+      reply = "{\"calls\":" + calls_json(calls) + "}";
     } else if (cmd == "hold") {    // one hold-to-repeat tick
       std::vector<std::string> calls;
       sc_hold_tick(collect, &calls);

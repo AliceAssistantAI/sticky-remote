@@ -20,9 +20,12 @@ substitutions:
   # "true" appends the MAC's last bytes to the name (sticky-remote-a1b2c3), so
   # several Stickies can live in one home. The generic firmware sets it.
   name_add_mac_suffix: "false"
-  firmware_version: "0.8.1"
+  firmware_version: "0.8.2"
 
   # --- Defaults for the device settings (overridden by settings sent over USB)
+  # Scenes the light dialog (press and hold a light) offers, as
+  # "scene.x|Name,...". The setup page writes the real list over USB.
+  light_scenes: ""
   room_name: Living room
   # Home Assistant base URL, used to fetch the artwork (entity_picture is a
   # relative /api/media_player_proxy/... path that carries its own token).
@@ -120,6 +123,7 @@ esphome:
             d.room = "${room_name}";
             d.ha_url = "${ha_base_url}";
             d.font_set = "${font_set}";
+            d.scenes = "${light_scenes}";
             sticky::load();
             remote_ui::calibration_enabled() = ${touch_calibration};
             sticky::set_default_touch_cal("${touch_map}");
@@ -154,6 +158,8 @@ esphome:
               void save_touch_cal(const remote_ui::TouchCal &c) override { sticky::save_touch_cal(c); }
               void sleep() override { id(go_to_sleep).execute(); }
               void install_update() override { id(install_firmware).execute(); }
+              void set_brightness(int i, int pct) override { id(light_set_bright).execute(i, pct); }
+              void turn_scene(const std::string &e) override { id(light_scene_run).execute(e); }
             };
             static EspActions esp_actions;
             remote_ui::actions() = &esp_actions;
@@ -517,6 +523,36 @@ script:
           data:
             entity_id: !lambda "return sticky::settings().light2;"
 
+  # The light dialog's slider: press and hold a light on the Sticky.
+  - id: light_set_bright
+    parameters:
+      i: int
+      pct: int
+    then:
+      - if:
+          condition:
+            lambda: 'return pct <= 0;'
+          then:
+            - homeassistant.action:
+                action: light.turn_off
+                data:
+                  entity_id: !lambda "return i ? sticky::settings().light2 : sticky::settings().light1;"
+          else:
+            - homeassistant.action:
+                action: light.turn_on
+                data:
+                  brightness: !lambda "return (int) (pct * 255 / 100);"
+                  entity_id: !lambda "return i ? sticky::settings().light2 : sticky::settings().light1;"
+  # A scene row of the light dialog.
+  - id: light_scene_run
+    parameters:
+      scene_id: string
+    then:
+      - homeassistant.action:
+          action: scene.turn_on
+          data:
+            entity_id: !lambda "return scene_id;"
+
   # On/off goes through the Android TV Remote integration's remote entity,
   # which reaches a sleeping TV over the network (CEC via the media_player
   # entity misses TVs that cut power).
@@ -761,7 +797,7 @@ interval:
             return;
           }
           // Hold to repeat: only while the touch controller still reports a finger.
-          if (id(touch).get_touches().empty()) remote_ui::touch_released();
+          if (id(touch).get_touches().empty()) remote_ui::touch_released(*remote_ui::actions());
           remote_ui::hold_tick(*remote_ui::actions());
           remote_ui::feedback_tick();   // clears the pad's pressed look
           if (id(epd).is_updating()) return;
@@ -883,7 +919,7 @@ touchscreen:
       mirror_x: ${touch_mirror_x}
       mirror_y: ${touch_mirror_y}
     on_release:
-      - lambda: 'remote_ui::touch_released();'
+      - lambda: 'remote_ui::touch_released(*remote_ui::actions());'
     on_touch:
       - lambda: |-
           const uint32_t now_ms = millis();
