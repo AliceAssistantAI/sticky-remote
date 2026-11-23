@@ -63,6 +63,10 @@ jobs:
           OTA_FILE=sticky-remote-$VERSION.ota.bin
           cp "$FACTORY" "out/$FACTORY_FILE"
           cp "$OTA" "out/$OTA_FILE"
+          # Version-independent aliases: releases/latest/download/<alias> then
+          # always serves the newest build, so links never need editing.
+          cp "$FACTORY" out/sticky-remote-latest.factory.bin
+          cp "$OTA" out/sticky-remote-latest.ota.bin
           FACTORY_SHA=$(sha256sum "out/$FACTORY_FILE" | cut -d' ' -f1)
           FACTORY_SIZE=$(stat -c%s "out/$FACTORY_FILE")
           OTA_MD5=$(md5sum "out/$OTA_FILE" | cut -d' ' -f1)
@@ -85,7 +89,9 @@ jobs:
           python3 web/release_notes.py "$VERSION" > /tmp/notes.md
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
             --title "v$VERSION" --notes-file /tmp/notes.md \
-            out/sticky-remote-$VERSION.factory.bin out/sticky-remote-$VERSION.ota.bin out/ota-manifest.json
+            out/sticky-remote-$VERSION.factory.bin out/sticky-remote-$VERSION.ota.bin \
+            out/sticky-remote-latest.factory.bin out/sticky-remote-latest.ota.bin \
+            out/ota-manifest.json
 
       - name: Publish the setup page with these images
         env:
