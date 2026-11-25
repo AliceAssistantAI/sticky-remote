@@ -20,7 +20,7 @@ substitutions:
   # "true" appends the MAC's last bytes to the name (sticky-remote-a1b2c3), so
   # several Stickies can live in one home. The generic firmware sets it.
   name_add_mac_suffix: "false"
-  firmware_version: "0.8.2"
+  firmware_version: "0.8.3"
 
   # --- Defaults for the device settings (overridden by settings sent over USB)
   # Scenes the light dialog (press and hold a light) offers, as
@@ -160,6 +160,7 @@ esphome:
               void install_update() override { id(install_firmware).execute(); }
               void set_brightness(int i, int pct) override { id(light_set_bright).execute(i, pct); }
               void turn_scene(const std::string &e) override { id(light_scene_run).execute(e); }
+              void switch_room(int i) override { sticky::switch_room(i); }
             };
             static EspActions esp_actions;
             remote_ui::actions() = &esp_actions;
@@ -171,6 +172,7 @@ esphome:
             remote_ui::apply("setup_url", "${setup_url}");
             remote_ui::set_ha_paired(id(ha_paired));
             sticky::unpair_hook() = []() { id(ha_paired) = false; };
+            sticky::room_publish() = [](const std::string &n) { id(room_text).publish_state(n); };
             // Announce ourselves on the USB line for setup tools.
             sticky::send_line(sticky::info("hello"));
 
@@ -293,6 +295,27 @@ select:
           for (uint8_t i = 0; i < 5; i++)
             if (x == NAMES[i]) sticky::set_sleep(i);
           id(sleep_after).publish_state(x);
+
+# The room this Sticky is set to. With room presence set up, Home Assistant
+# writes it (text.set_value with the exact room name) as people move; the
+# Sticky's screen follows its entities and repaints from its room caches.
+# Switching rooms by hand — press and hold the room name — publishes here too.
+text:
+  - platform: template
+    id: room_text
+    name: "Room"
+    icon: mdi:home-switch
+    entity_category: config
+    max_length: 64
+    update_interval: 60s
+    lambda: 'return std::string(sticky::settings().room);'
+    set_action:
+      - lambda: |-
+          const auto rooms = sticky::parse_rooms(sticky::settings().rooms);
+          for (size_t i = 0; i < rooms.size(); i++)
+            if (rooms[i].name == x) { sticky::switch_room((int) i); return; }
+          ESP_LOGW("sticky", "unknown room: %s", x.c_str());
+          id(room_text).publish_state(sticky::settings().room);   // snap the entity back to reality
 
 time:
   - platform: homeassistant

@@ -24,8 +24,10 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include <JPEGDEC.h>
 
@@ -61,13 +63,15 @@ namespace sticky {
 static const char *const TAG = "sticky";
 constexpr int PROTOCOL = 1;
 // What this firmware's USB protocol can do beyond version 1, for the setup page.
-static const char *const CAPS[] = {"scan", "touch_sound", "sleep_after", "sleep_clock", "unpair", "scenes"};
+static const char *const CAPS[] = {"scan", "touch_sound", "sleep_after", "sleep_clock", "unpair", "scenes", "rooms"};
 
 struct Settings {
   std::string player, remote, player_name, app, app_label;
   std::string light1, light1_name, light1_icon, light2, light2_name, light2_icon;
   std::string room, ha_url, font_set;  // font_set: "inter" or "trmnl"
   std::string scenes;  // the light dialog's list, "scene.x|Name,..." (its own preference)
+  std::string rooms;   // room profiles, "Name;player;player name;light1;its name;light2;its name|..." (its own preference)
+  int room_index = 0;  // which room this remote is set to (rooms, parsed)
   bool configured() const { return !player.empty() || !light1.empty(); }
   int light_count() const { return light2.empty() ? 1 : 2; }
 };
@@ -115,6 +119,47 @@ inline esphome::ESPPreferenceObject &scenes_pref() {
   return p;
 }
 
+// --- Rooms (again their own preference: the settings' stored layout stays as it was) ---
+struct RoomsStored { char text[700]; uint8_t active; };
+inline esphome::ESPPreferenceObject &rooms_pref() {
+  static esphome::ESPPreferenceObject p = esphome::global_preferences->make_preference<RoomsStored>(0x534B524D, true);
+  return p;
+}
+
+/// One room: what to control and how to name it while the remote lives there.
+struct RoomProfile {
+  std::string name, player, player_name, light1, light1_name, light2, light2_name;
+};
+
+inline std::vector<RoomProfile> parse_rooms(const std::string &text) {
+  std::vector<RoomProfile> out;
+  size_t pos = 0;
+  while (pos < text.size() && out.size() < (size_t) remote_ui::MAX_ROOMS) {
+    const size_t bar = text.find('|', pos);
+    const std::string row = text.substr(pos, bar == std::string::npos ? std::string::npos : bar - pos);
+    pos = bar == std::string::npos ? text.size() : bar + 1;
+    if (row.empty()) continue;
+    std::vector<std::string> f;
+    size_t at = 0;
+    while (true) {
+      const size_t semi = row.find(';', at);
+      f.push_back(row.substr(at, semi == std::string::npos ? std::string::npos : semi - at));
+      if (semi == std::string::npos) break;
+      at = semi + 1;
+    }
+    auto get = [&f](size_t i) { return i < f.size() ? f[i] : std::string(); };
+    out.push_back({get(0), get(1), get(2), get(3), get(4), get(5), get(6)});
+  }
+  return out;
+}
+
+inline void apply_room_entities(const RoomProfile &r, Settings &s) {
+  s.room = r.name;
+  s.player = r.player; s.player_name = r.player_name;
+  s.light1 = r.light1; s.light1_name = r.light1_name;
+  s.light2 = r.light2; s.light2_name = r.light2_name;
+}
+
 /// Loads stored settings (falling back to the YAML defaults).
 inline void load() {
   Stored st{};
@@ -128,6 +173,18 @@ inline void load() {
   }
   ScenesStored sc{};
   if (scenes_pref().load(&sc)) s.scenes = sc.text;
+  RoomsStored rm{};
+  if (rooms_pref().load(&rm)) {
+    s.rooms = rm.text;
+    s.room_index = rm.active < remote_ui::MAX_ROOMS ? rm.active : 0;
+  }
+  if (!s.rooms.empty()) {   // the room this remote lives in decides what it controls
+    const auto rooms = parse_rooms(s.rooms);
+    if (!rooms.empty()) {
+      if (s.room_index >= (int) rooms.size()) s.room_index = 0;
+      apply_room_entities(rooms[s.room_index], s);
+    }
+  }
   ESP_LOGI(TAG, "settings: %s, player=%s light1=%s light2=%s", stored_present() ? "stored" : "defaults",
            s.player.c_str(), s.light1.c_str(), s.light2.c_str());
 }
@@ -141,6 +198,10 @@ inline bool save(const Settings &s) {
   ScenesStored sc{};
   copy_out(sc.text, sizeof sc.text, s.scenes);
   scenes_pref().save(&sc);
+  RoomsStored rm{};
+  copy_out(rm.text, sizeof rm.text, s.rooms);
+  rm.active = (uint8_t) (s.room_index < 0 ? 0 : s.room_index);
+  rooms_pref().save(&rm);
   const bool ok = pref().save(&st) && esphome::global_preferences->sync();
   if (ok) stored_present() = true;
   return ok;
@@ -342,6 +403,8 @@ inline void forget() {
   pref().save(&st);
   ScenesStored none{};
   scenes_pref().save(&none);
+  RoomsStored no_rooms{};
+  rooms_pref().save(&no_rooms);
   esphome::global_preferences->sync();
   stored_present() = false;
 }
@@ -366,6 +429,13 @@ inline void apply_to_ui() {
   remote_ui::apply("light_icon0", s.light1_icon);
   remote_ui::apply("light_icon1", s.light2_icon);
   remote_ui::apply("scenes", s.scenes);
+  std::string room_names;   // the UI only needs the names, in order
+  for (const auto &r : parse_rooms(s.rooms)) {
+    if (!room_names.empty()) room_names += "|";
+    room_names += r.name;
+  }
+  remote_ui::apply("rooms", room_names);
+  remote_ui::model().room_index = s.room_index;
   remote_ui::apply("configured", s.configured() ? "1" : "0");
   remote_ui::apply("app_button", remote_ui::app_key_label(s.app, s.app_label));
   remote_ui::apply("sleep_clock", clock_on() ? "1" : "0");
@@ -629,17 +699,52 @@ inline void keep_scan_results() {
     esphome::wifi::global_wifi_component->set_keep_scan_results(true);
 }
 
+// --- Switching rooms ------------------------------------------------------------
+inline std::function<void(const std::string &)> &room_publish() {   // the Home Assistant "Room" text entity
+  static std::function<void(const std::string &)> f;
+  return f;
+}
+
+/// Moves this remote to another room — its entities, its labels, and the state
+/// on screen (from the cache, so it paints at once). Home Assistant's presence
+/// automations call it through the "Room" text entity; the picker does the same
+/// by hand. Nothing about where the person is lives here: HA decides that.
+inline bool switch_room(int i) {
+  const auto rooms = parse_rooms(settings().rooms);
+  if (i < 0 || i >= (int) rooms.size()) return false;
+  auto &s = settings();
+  if (i == s.room_index) return true;
+  remote_ui::state_snapshot(s.room_index, remote_ui::model());   // remember the room we leave
+  apply_room_entities(rooms[i], s);
+  s.room_index = i;
+  remote_ui::model().room_index = i;
+  remote_ui::state_restore(i);
+  const std::string &pic = remote_ui::room_cache()[i].picture;
+  if (!pic.empty()) fetch_poster(pic);
+  if (room_publish()) room_publish()(rooms[i].name);
+  RoomsStored rm{};   // where this remote lives survives a reboot
+  copy_out(rm.text, sizeof rm.text, s.rooms);
+  rm.active = (uint8_t) i;
+  rooms_pref().save(&rm);
+  remote_ui::request(true);
+  return true;
+}
+
 /// Subscribes to the chosen entities. Call before the API connects (on_boot).
 inline void subscribe(esphome::api::APIServer *api) {
   if (api == nullptr) return;
   const auto &s = settings();
-  auto sub = [api](const std::string &entity, const char *attribute, const char *key) {
+  auto sub = [api](const std::string &entity, const char *attribute, const char *key, int room) {
     if (entity.empty()) return;
     esphome::optional<std::string> attr;
     if (attribute != nullptr) attr = std::string(attribute);
     const std::string k = key;
-    api->subscribe_home_assistant_state(entity, attr, [k](esphome::StringRef v) {
+    api->subscribe_home_assistant_state(entity, attr, [k, room](esphome::StringRef v) {
       const std::string value(v.c_str(), v.size());
+      if (room != settings().room_index) {   // a room that isn't showing: keep its cache warm
+        if (room >= 0 && room < remote_ui::MAX_ROOMS) remote_ui::cache_set(remote_ui::room_cache()[room], k, value);
+        return;
+      }
       if (k == "picture") {
         const std::string before = remote_ui::model().picture;
         remote_ui::apply(k, value);
@@ -650,24 +755,35 @@ inline void subscribe(esphome::api::APIServer *api) {
       remote_ui::apply(k, value);
     });
   };
-  // HA forwards in subscription order: the state and the app come first, since
-  // they clear the details (remote_ui::clear_media) that follow them.
-  sub(s.player, nullptr, "player_state");
-  sub(s.player, "app_name", "app");
-  sub(s.player, "media_title", "title");
-  sub(s.player, "media_series_title", "series");
-  sub(s.player, "media_artist", "artist");
-  sub(s.player, "media_season", "season");
-  sub(s.player, "media_episode", "episode");
-  sub(s.player, "media_position", "position");
-  sub(s.player, "media_duration", "duration");
-  sub(s.player, "volume_level", "volume");
-  sub(s.player, "media_position_updated_at", "position_at");
-  sub(s.player, "entity_picture", "picture");
-  sub(s.light1, nullptr, "light0_state");
-  sub(s.light1, "brightness", "light0_brightness");
-  sub(s.light2, nullptr, "light1_state");
-  sub(s.light2, "brightness", "light1_brightness");
+  auto sub_room = [&sub](const std::string &player, const std::string &l1, const std::string &l2, int room) {
+    // HA forwards in subscription order: the state and the app come first, since
+    // they clear the details (remote_ui::clear_media) that follow them.
+    sub(player, nullptr, "player_state", room);
+    sub(player, "app_name", "app", room);
+    sub(player, "media_title", "title", room);
+    sub(player, "media_series_title", "series", room);
+    sub(player, "media_artist", "artist", room);
+    sub(player, "media_season", "season", room);
+    sub(player, "media_episode", "episode", room);
+    sub(player, "media_position", "position", room);
+    sub(player, "media_duration", "duration", room);
+    sub(player, "volume_level", "volume", room);
+    sub(player, "media_position_updated_at", "position_at", room);
+    sub(player, "entity_picture", "picture", room);
+    sub(l1, nullptr, "light0_state", room);
+    sub(l1, "brightness", "light0_brightness", room);
+    sub(l2, nullptr, "light1_state", room);
+    sub(l2, "brightness", "light1_brightness", room);
+  };
+  // With rooms configured every room's entities are subscribed once, at boot:
+  // switching a room then costs nothing but a repaint from the cache.
+  const auto rooms = parse_rooms(s.rooms);
+  if (rooms.size() > 1) {
+    for (size_t i = 0; i < rooms.size(); i++)
+      sub_room(rooms[i].player, rooms[i].light1, rooms[i].light2, (int) i);
+  } else {
+    sub_room(s.player, s.light1, s.light2, s.room_index);
+  }
 }
 
 // --- USB setup protocol ------------------------------------------------------------
@@ -725,6 +841,8 @@ inline std::string info(const char *event) {
     STICKY_FIELDS(X)
 #undef X
     st["scenes"] = settings().scenes;
+    st["rooms"] = settings().rooms;
+    st["room_at"] = settings().room_index;   // "room" itself is the name, from STICKY_FIELDS
     st["touch_sound"] = SOUND_NAMES[sound()];
     st["sleep_after"] = SLEEP_NAMES[sleep_choice()];
     st["sleep_clock"] = clock_on() ? "on" : "off";
@@ -864,6 +982,16 @@ inline void handle(const std::string &line) {
       STICKY_FIELDS(X)
 #undef X
       if (in["scenes"].is<const char *>()) s.scenes = in["scenes"].as<const char *>();
+      if (in["rooms"].is<const char *>()) s.rooms = in["rooms"].as<const char *>();
+      if (in["room_at"].is<int>()) s.room_index = in["room_at"].as<int>();
+      if (s.room_index < 0 || s.room_index >= remote_ui::MAX_ROOMS) s.room_index = 0;
+      if (!s.rooms.empty()) {   // the room this remote is set to decides the entities
+        const auto rooms = parse_rooms(s.rooms);
+        if (!rooms.empty()) {
+          if (s.room_index >= (int) rooms.size()) s.room_index = 0;
+          apply_room_entities(rooms[s.room_index], s);
+        }
+      }
     }
     JsonObject wifi = doc["wifi"];
     if (!wifi.isNull() && wifi["ssid"].is<const char *>()) {

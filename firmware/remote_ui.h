@@ -137,6 +137,9 @@ struct Model {
   bool asleep_clock = false;      // the asleep face shows the clock (sleep_logic::shows_clock, set on falling asleep)
   int light_panel = -1;             // the light dialog: which tile opened it, -1 while closed
   std::string scenes;               // "scene.tv|Movie night,scene.all|All off" (the setup page picks them)
+  std::string rooms;                // "Living room|Bedroom|...": room names in order (the setup page picks them)
+  int room_index = 0;               // which room this remote is set to right now
+  bool room_picker = false;         // the room picker card is open
   // Firmware updates from the GitHub release (the firmware's update entity).
   std::string fw_version;         // running
   std::string update_version;     // newer one available, or empty
@@ -1263,6 +1266,105 @@ inline void draw_light_panel(Ctx &c, const Model &m, const char *name) {
   }
 }
 
+// --- Rooms: the remote follows the person, not the couch -------------------------
+constexpr int MAX_ROOMS = 4;    // the preference block and the state cache stay small
+
+/// How many rooms are configured; the names ride in order: "Living room|Bedroom|..."
+inline int room_count(const std::string &s) {
+  if (s.empty()) return 0;
+  int n = 1;
+  for (char ch : s)
+    if (ch == '|' && ++n == MAX_ROOMS) break;
+  return n;
+}
+
+inline std::string room_name_at(const std::string &s, int i) {
+  size_t pos = 0;
+  for (int k = 0;; k++) {
+    const size_t bar = s.find('|', pos);
+    if (k == i) return s.substr(pos, bar == std::string::npos ? std::string::npos : bar - pos);
+    if (bar == std::string::npos) return "";
+    pos = bar + 1;
+  }
+}
+
+/// What each room showed when we last looked at it. Switching rooms paints from
+/// this cache at once; the firmware keeps the invisible rooms' copies fresh.
+struct RoomState {
+  std::string player_state, title, series, artist, app, picture;
+  float season = NAN, episode = NAN, position = NAN, duration = NAN, volume = NAN;
+  int64_t position_at = -1;
+  std::string light_state[2];
+  float light_brightness[2] = {NAN, NAN};
+  bool seen = false;
+};
+
+inline RoomState (&room_cache())[MAX_ROOMS] {
+  static RoomState cache[MAX_ROOMS];
+  return cache;
+}
+
+/// Remembers what the room at `i` shows right now — call before leaving that room.
+inline void state_snapshot(int i, const Model &m) {
+  if (i < 0 || i >= MAX_ROOMS) return;
+  auto &rs = room_cache()[i];
+  rs.player_state = m.player_state; rs.title = m.title; rs.series = m.series; rs.artist = m.artist;
+  rs.app = m.app; rs.picture = m.picture;
+  rs.season = m.season; rs.episode = m.episode; rs.position = m.position;
+  rs.duration = m.duration; rs.volume = m.volume; rs.position_at = m.position_at;
+  for (int k = 0; k < 2; k++) {
+    rs.light_state[k] = m.lights[k].state;
+    rs.light_brightness[k] = m.lights[k].brightness;
+  }
+  rs.seen = true;
+}
+
+/// Paints the room at `i`; a room that never reported shows everything unknown.
+inline void state_restore(int i) {
+  auto &m = model();
+  const auto &rs = room_cache()[i];
+  m.poster_loaded = rs.seen && !rs.picture.empty() && rs.picture == m.picture && m.poster_loaded;
+  m.player_state = rs.player_state; m.title = rs.title; m.series = rs.series;
+  m.artist = rs.artist; m.app = rs.app; m.picture = rs.picture;
+  m.season = rs.season; m.episode = rs.episode; m.position = rs.position;
+  m.duration = rs.duration; m.volume = rs.volume; m.position_at = rs.position_at;
+  for (int k = 0; k < 2; k++) {
+    m.lights[k].state = rs.light_state[k];
+    m.lights[k].brightness = rs.light_brightness[k];
+  }
+  if (rs.seen) m.state_seen = true;
+  m.light_panel = -1;
+  m.room_picker = false;
+}
+
+constexpr int RP_PAD = 30, RP_TITLE_H = 48, RP_ROW_H = 62, RP_ROW_GAP = 12;
+
+struct RoomPick { int x0, y0, x1, y1, n, row0; };
+
+inline RoomPick room_pick_geom(const Model &m) {
+  const int n = room_count(m.rooms);
+  const int w = 520;
+  const int h = RP_PAD + RP_TITLE_H + (n > 0 ? n * RP_ROW_H + (n - 1) * RP_ROW_GAP + RP_PAD : 0);
+  const int x0 = (W - w) / 2, y0 = (H - h) / 2;
+  return {x0, y0, x0 + w, y0 + h, n, y0 + RP_PAD + RP_TITLE_H};
+}
+
+inline void draw_room_picker(Ctx &c, const Model &m) {
+  const RoomPick p = room_pick_geom(m);
+  c.it.fill(c.paper);
+  c.it.rectangle(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0, c.ink);
+  c.it.print((p.x0 + p.x1) / 2, p.y0 + RP_PAD + RP_TITLE_H / 2, c.f.t22, c.ink, TextAlign::CENTER,
+             "This remote is in");
+  for (int i = 0; i < p.n; i++) {
+    const int ry = p.row0 + i * (RP_ROW_H + RP_ROW_GAP);
+    const bool cur = i == m.room_index;
+    if (cur) c.it.filled_rectangle(p.x0 + RP_PAD, ry, p.x1 - p.x0 - 2 * RP_PAD, RP_ROW_H, c.ink);
+    else c.it.rectangle(p.x0 + RP_PAD, ry, p.x1 - p.x0 - 2 * RP_PAD, RP_ROW_H, c.ink);
+    print_fit(c, (p.x0 + p.x1) / 2, ry + RP_ROW_H / 2, c.f.t26, cur ? c.paper : c.ink, TextAlign::CENTER,
+              room_name_at(m.rooms, i), p.x1 - p.x0 - 2 * RP_PAD - 24);
+  }
+}
+
 inline void draw_screen(Ctx &c, const Model &m, const GrayImage &poster,
                         int64_t now_epoch, bool time_valid, int hour, int minute, const char *room,
                         const char *name1, const char *name2,
@@ -1289,6 +1391,7 @@ inline void draw_screen(Ctx &c, const Model &m, const GrayImage &poster,
     draw_volume(c, m);
   }
   if (m.light_panel >= 0) draw_light_panel(c, m, m.light_panel == 0 ? name1 : name2);
+  if (m.room_picker) draw_room_picker(c, m);
 }
 
 struct Labels {
@@ -1348,6 +1451,9 @@ enum Action {
   LIGHT_POWER,      // the dialog's on/off button
   LIGHT_BRIGHT,     // seek_to: the slider's 0..1 position
   LIGHT_SCENE,      // seek_to: the scene row
+  ROOM_ARM,         // press and hold the room name in the status bar
+  ROOM_CLOSE,       // a tap outside the room card dismisses it
+  ROOM_ROW,         // seek_to: the room row
 };
 
 // remote.send_command name for each pad action (Android TV Remote integration).
@@ -1386,6 +1492,19 @@ inline Action hit_light_panel(const Model &m, int x, int y, float &seek_to) {
   return NONE;
 }
 
+inline Action hit_room_picker(const Model &m, int x, int y, float &seek_to) {
+  const RoomPick p = room_pick_geom(m);
+  for (int i = 0; i < p.n; i++) {
+    const int ry = p.row0 + i * (RP_ROW_H + RP_ROW_GAP);
+    if (x >= p.x0 + RP_PAD - 8 && x <= p.x1 - RP_PAD + 8 &&
+        y >= ry - RP_ROW_GAP / 2 && y <= ry + RP_ROW_H + RP_ROW_GAP / 2) {
+      seek_to = (float) i;   // handle_tap reads the row back, as with scenes
+      return ROOM_ROW;
+    }
+  }
+  return ROOM_CLOSE;
+}
+
 inline Action hit(const Model &m, int x, int y, int64_t now_epoch, float &seek_to) {
   if (m.in_setup()) return NONE;
   if (m.update_prompt) {
@@ -1395,7 +1514,9 @@ inline Action hit(const Model &m, int x, int y, int64_t now_epoch, float &seek_t
     return NONE;
   }
   if (m.light_panel >= 0) return hit_light_panel(m, x, y, seek_to);   // the dialog takes the whole screen
+  if (m.room_picker) return hit_room_picker(m, x, y, seek_to);        // ... and so does the room card
   if (!m.update_version.empty() && y < TILE_Y - 6) return UPDATE_OPEN;
+  if (room_count(m.rooms) > 1 && y < STATUS_H && x < W / 2 - 20) return ROOM_ARM;   // the room name
   const int n = tile_count(m.light_count);
   for (int i = 0; i < n; i++)
     if (in(x, y, tile_x(i, n) - TILE_GAP / 2, TILE_Y - 6, tile_w(n) + TILE_GAP, TILE_H + 10))   // down to the tabs
@@ -1506,8 +1627,29 @@ inline std::string app_key_label(const std::string &app, const std::string &labe
 /// and what the simulator's sc_set passes on. Keys: player_state title series artist
 /// app season episode position duration volume position_at (ISO 8601) picture
 /// light0_state light1_state light0_brightness light1_brightness online usb
-/// battery sleeping net ip ha_paired device_name setup_url
+/// battery sleeping net ip ha_paired device_name setup_url rooms room_index
 /// light_count light_icon0 light_icon1 configured app_button scenes.
+/// A room's value arriving while another room is on screen goes to that room's cache.
+inline void cache_set(RoomState &rs, const std::string &key, const std::string &v) {
+  rs.seen = true;
+  if (key == "player_state") rs.player_state = v;
+  else if (key == "title") rs.title = clean(v);
+  else if (key == "series") rs.series = clean(v);
+  else if (key == "artist") rs.artist = clean(v);
+  else if (key == "app") rs.app = clean(v);
+  else if (key == "picture") rs.picture = v;
+  else if (key == "season") rs.season = to_float(v);
+  else if (key == "episode") rs.episode = to_float(v);
+  else if (key == "position") rs.position = to_float(v);
+  else if (key == "duration") rs.duration = to_float(v);
+  else if (key == "volume") rs.volume = to_float(v);
+  else if (key == "position_at") rs.position_at = parse_iso8601(v);
+  else if (key == "light0_state") rs.light_state[0] = v;
+  else if (key == "light1_state") rs.light_state[1] = v;
+  else if (key == "light0_brightness") rs.light_brightness[0] = to_float(v);
+  else if (key == "light1_brightness") rs.light_brightness[1] = to_float(v);
+}
+
 inline void apply(const std::string &key, const std::string &v) {
   auto &m = model();
   if (key == "player_state") return set_player_state(v);
@@ -1530,6 +1672,8 @@ inline void apply(const std::string &key, const std::string &v) {
   else if (key == "light0_brightness") m.lights[0].brightness = to_float(v);
   else if (key == "light1_brightness") m.lights[1].brightness = to_float(v);
   else if (key == "scenes") m.scenes = v;
+  else if (key == "rooms") { m.rooms = v; m.room_picker = false; return request(true); }
+  else if (key == "room_index") { m.room_index = (int) to_float(v); return; }
   else if (key == "online") m.online = v == "1";
   else if (key == "usb") m.usb = v == "1";
   else if (key == "sleeping") {   // the simulator and design renders (the firmware's go_to_sleep sets these itself)
@@ -1622,6 +1766,7 @@ struct Actions {
   virtual void install_update() {}                      // download and flash the newer release
   virtual void set_brightness(int i, int pct) {}        // the dialog's slider, 0..100 (0: off)
   virtual void turn_scene(const std::string &entity) {} // a scene row of the dialog
+  virtual void switch_room(int index) {}                // the room picker: move this remote elsewhere
 };
 
 inline Actions *&actions() {
@@ -1676,6 +1821,15 @@ inline void hold_tick(Actions &act) {
   if (h.action == LIGHT_1 || h.action == LIGHT_2) {        // a held light opens the dialog
     if (now - h.since >= LIGHT_HOLD_MS) {
       model().light_panel = h.action == LIGHT_1 ? 0 : 1;
+      h.action = NONE;
+      act.click();
+      request(true);
+    }
+    return;
+  }
+  if (h.action == ROOM_ARM) {                              // a held room name opens the room picker
+    if (now - h.since >= LIGHT_HOLD_MS) {
+      model().room_picker = true;
       h.action = NONE;
       act.click();
       request(true);
@@ -1747,8 +1901,19 @@ inline Action handle_tap(int x, int y, int64_t now_epoch, Actions &act) {
     }
     return a;
   }
+  // The room picker, likewise: everything hit() returned belongs to the card.
+  if (m.room_picker) {
+    act.click();
+    if (a == ROOM_ROW) {
+      const int i = (int) seek_to;
+      if (i >= 0 && i < room_count(m.rooms)) act.switch_room(i);   // the firmware switches and repaints
+    }
+    m.room_picker = false;
+    request(true);
+    return a;
+  }
   // A light tile decides on release: quick tap toggles (touch_released), hold opens the dialog (hold_tick).
-  if (a == LIGHT_1 || a == LIGHT_2) {
+  if (a == LIGHT_1 || a == LIGHT_2 || a == ROOM_ARM) {
     hold() = Hold{a, esphome::millis(), 0};
     return a;
   }

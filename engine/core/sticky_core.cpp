@@ -66,6 +66,7 @@ struct CallbackActions : remote_ui::Actions {
   void install_update() override { send("install_update"); }
   void set_brightness(int i, int pct) override { send("brightness " + std::to_string(i) + " " + std::to_string(pct)); }
   void turn_scene(const std::string &entity) override { send("scene " + entity); }
+  void switch_room(int i) override { send("room " + std::to_string(i)); }
 } g_actions;
 
 }  // namespace
@@ -206,7 +207,7 @@ const char *sc_action_name(int a) {
                                       "TAB_NOW", "TAB_REMOTE", "NAV_UP", "NAV_DOWN", "NAV_LEFT", "NAV_RIGHT",
                                       "NAV_SELECT", "NAV_BACK", "NAV_HOME", "UPDATE_OPEN", "UPDATE_INSTALL",
                                       "UPDATE_CLOSE", "LIGHT_CLOSE", "LIGHT_POWER",
-                                      "LIGHT_BRIGHT", "LIGHT_SCENE"};
+                                      "LIGHT_BRIGHT", "LIGHT_SCENE", "ROOM_ARM", "ROOM_CLOSE", "ROOM_ROW"};
   return a >= 0 && a < (int) (sizeof names / sizeof *names) ? names[a] : "?";
 }
 

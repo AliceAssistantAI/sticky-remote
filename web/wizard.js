@@ -28,7 +28,11 @@ const S = {
     light1: "", light1_name: "", light1_icon: "bulb", light2: "", light2_name: "", light2_icon: "bulb",
     room: "", ha_url: "", font_set: "inter", touch_sound: "quiet", sleep_after: "3", sleep_clock: "on",
     scenes: "",   // the light dialog's list: "scene.x|Name,..." (up to 6)
+    rooms: "",    // room profiles: "Name;player;player name;light1;its name;light2;its name|..." (up to 4)
+    room_at: 0,   // which of them this remote sits in
   },
+  rooms: [],              // working copy of settings.rooms: {name, player, light1, light2}
+  presence: { on: false, person: "", entity: "", zones: {} },   // Home Assistant moves the Sticky
   timers: [],
   attn: null,           // Home Assistant's side of the pairing (haAttention)
   unpaired: false,      // the Sticky was told once to forget a stale key
@@ -404,6 +408,59 @@ const VIEWS = [
       : sceneList.slice(0, 8).map((e) => `<label class="pick"><input type="checkbox" data-scene="${esc(e.entity_id)}" data-name="${esc(name(e))}" ${chosen.includes(e.entity_id) ? "checked" : ""}> ${esc(name(e))}</label>`).join("");
     const sources = S.ha.states.find((e) => e.entity_id === s.player)?.attributes?.source_list || [];
     const two = !!s.light2 || S.twoLights;
+    // Optional smart rooms: several profiles, and (with Home Assistant room
+    // presence) automations that move this Sticky to wherever its people are.
+    const roomCard = !has("rooms") ? "" : (() => {
+      const rf = (i, k, label, domain) => {
+        const v = S.rooms[i][k] || "";
+        return domain && !manual
+          ? `<label class="field"><span>${label}</span><select data-rk="${k}" data-ri="${i}">
+              <option value="">None</option>
+              ${list(domain).map((e) => `<option value="${esc(e.entity_id)}" ${e.entity_id === v ? "selected" : ""}>${esc(name(e))}</option>`).join("")}</select></label>`
+          : `<label class="field"><span>${label}</span><input type="text" data-rk="${k}" data-ri="${i}" value="${esc(v)}" placeholder="${domain ? domain + ".…" : ""}"></label>`;
+      };
+      const rows = S.rooms.map((r, i) => `
+        <div class="light">
+          <div class="row"><label class="field"><span>Name</span>
+            <input type="text" data-rk="name" data-ri="${i}" value="${esc(r.name)}" placeholder="Living room"></label>
+            ${S.rooms.length > 1 ? `<button class="link" data-rm="${i}" style="align-self:flex-end">Remove</button>` : ""}</div>
+          ${rf(i, "player", "Player", "media_player")}
+          ${rf(i, "light1", "Light", "light")}
+          ${rf(i, "light2", "Second light", "light")}
+        </div>`).join("");
+      const ent = roomTextEntity();
+      const persons = list("person");
+      const presenceBody = S.presence.on ? `
+        <div class="light-opts">
+          ${persons.length && !manual ? `<label class="field"><span>Follow</span><select id="presence-person">
+              <option value="">Choose a person…</option>
+              ${persons.map((e) => `<option value="${esc(e.entity_id)}" ${e.entity_id === S.presence.person ? "selected" : ""}>${esc(name(e))}</option>`).join("")}</select></label>` : ""}
+          ${manual || !list("zone").length ? "" : S.rooms.map((r, i) => {
+            const zl = list("zone"), guess = "zone." + (roomSlug(r.name) || "living_room");
+            const cur = S.presence.zones[i] || (zl.some((z) => z.entity_id === guess) ? guess : "");
+            return `<label class="field"><span>Zone for ${esc(cleanRoom(r.name) || "this room")}</span><select data-zone="${i}">
+              <option value="">Guess: ${esc(guess)}</option>
+              ${zl.map((z) => `<option value="${esc(z.entity_id)}" ${z.entity_id === cur ? "selected" : ""}>${esc(name(z))}</option>`).join("")}</select></label>`;
+          }).join("")}
+          <label class="field"><span>The Sticky's Room entity</span>
+            <input type="text" id="presence-entity" value="${esc(ent)}" placeholder="text.…_room">
+            <small>${ent ? `Found on your Home Assistant: <b>${esc(ent)}</b>.`
+              : "Not found yet: save the Sticky, let Home Assistant pick the integration up, then reload this page — or type the entity id."}</small></label>
+          <p class="hint">One automation per room. In Home Assistant: <b>Settings › Automations &amp; scenes</b> → <b>Create automation</b> → ⋮ → <b>Edit in YAML</b> → paste one block → <b>Save</b>; repeat per room. Wherever the person enters the zone, the Sticky moves to that room. Any presence setup works — zones, sensors, blueprints: they all just write the room's name.</p>
+          <pre class="yaml" id="presence-yaml">${esc(presenceYaml())}</pre>
+          <button class="link" id="presence-copy">Copy these automations</button>
+          <p class="hint">Without the automations the Sticky simply stays where you left it — press and hold its room name to move it by hand.</p>
+        </div>` : "";
+      return `<section class="card">
+        <h3>Rooms</h3>
+        <p class="hint">One Sticky for several rooms: keep a profile per room — whose player, which lights. Press and hold the room name at the top of the Sticky: pick a room and the screen shows that one.</p>
+        ${S.rooms.length ? rows : `<button class="link" id="add-room">+ Start with two rooms</button>`}
+        ${S.rooms.length && S.rooms.length < 4 ? `<button class="link" id="add-room">+ Add a room</button>` : ""}
+        ${S.rooms.length > 1 ? `<label class="field"><span>This Sticky sits in</span><select id="room-at">
+          ${S.rooms.map((r, i) => `<option value="${i}" ${i === S.settings.room_at ? "selected" : ""}>${esc(cleanRoom(r.name) || "Room " + (i + 1))}</option>`).join("")}</select></label>` : ""}
+        ${S.rooms.length > 1 ? `<label class="pick" style="margin-top:10px"><input type="checkbox" id="presence" ${S.presence.on ? "checked" : ""}> Let Home Assistant move this Sticky between rooms</label>${presenceBody}` : ""}
+      </section>`;
+    })();
     return {
       html: `
         <h2>Your remote</h2>
@@ -433,6 +490,7 @@ const VIEWS = [
                 ${scenePicker}
                 <small>Press and hold a light on the Sticky: a brightness slider and these scenes open up.</small></div>` : ""}
             </section>
+            ${roomCard}
             <section class="card">
               <h3>Look and sound</h3>
               <div class="row">
@@ -511,11 +569,46 @@ const VIEWS = [
             preview();
           });
         });
+        $("#add-room")?.addEventListener("click", () => {
+          if (!S.rooms.length) {
+            S.rooms = [{ name: cleanRoom(s.room) || "Living room", player: s.player, light1: s.light1, light2: s.light2 },
+                       { name: "Bedroom", player: "", light1: "", light2: "" }];
+            S.settings.room_at = 0;
+          } else if (S.rooms.length < 4) {
+            S.rooms.push({ name: "", player: s.player, light1: "", light2: "" });
+          }
+          writeRoomList(); render();
+        });
+        document.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", () => {
+          S.rooms.splice(+b.dataset.rm, 1);
+          if (!S.rooms.length) { s.rooms = ""; s.room_at = 0; } else writeRoomList();
+          render();
+        }));
+        document.querySelectorAll("[data-rk]").forEach((el) => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+          const r = S.rooms[+el.dataset.ri];
+          if (!r) return;
+          r[el.dataset.rk] = el.dataset.rk === "name" ? cleanRoom(el.value) : el.value.trim();
+          writeRoomList(); preview();
+        }));
+        $("#room-at")?.addEventListener("change", (e) => { S.settings.room_at = +e.target.value; writeRoomList(); preview(); render(); });
+        $("#presence")?.addEventListener("change", (e) => { S.presence.on = e.target.checked; render(); });
+        $("#presence-person")?.addEventListener("change", (e) => { S.presence.person = e.target.value; render(); });
+        document.querySelectorAll("[data-zone]").forEach((el) => el.addEventListener("change", () => { S.presence.zones[+el.dataset.zone] = el.value; render(); }));
+        $("#presence-entity")?.addEventListener("input", (e) => { S.presence.entity = e.target.value.trim(); });
+        $("#presence-copy")?.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(presenceYaml()); $("#presence-copy").textContent = "Copied — now paste them into Home Assistant."; }
+          catch {
+            const p = $("#presence-yaml"), rng = document.createRange();
+            rng.selectNodeContents(p); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rng);
+          }
+        });
         preview();
         bindNav(() => {
           const err = !s.player ? "Choose a media player."
             : !s.light1 ? "Choose a light."
-            : s.light2 && s.light2 === s.light1 ? "The second light is the same as the first: choose another one, or remove it." : "";
+            : s.light2 && s.light2 === s.light1 ? "The second light is the same as the first: choose another one, or remove it."
+            : S.rooms.some((r) => !cleanRoom(r.name)) ? "Every room needs a name."
+            : new Set(S.rooms.map((r) => cleanRoom(r.name).toLowerCase())).size !== S.rooms.length ? "Two rooms share a name — Home Assistant could not tell them apart." : "";
           if (err) { $("#remote-error").hidden = false; $("#remote-error").textContent = err; return; }
           if (!s.app_label && s.app) s.app_label = `Open ${s.app}`;
           if (!s.player_name) s.player_name = "Player";
@@ -861,6 +954,58 @@ function guessIcon(id) {
 
 // --- Actions ----------------------------------------------------------------------------
 const name = (e) => e.attributes?.friendly_name || e.entity_id;
+
+// --- Rooms ---------------------------------------------------------------------------
+// The profiles travel inside settings.rooms as
+// "Name;player;player name;light1;its name;light2;its name|..."; S.rooms is the
+// card's working copy. Names lose the separators as you type them.
+const roomSlug = (t) => String(t || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+const cleanRoom = (t) => String(t || "").replace(/[;|]/g, "").trim();
+function parseRoomList(text) {
+  return String(text || "").split("|").filter(Boolean).slice(0, 4).map((row) => {
+    const f = row.split(";");
+    return { name: cleanRoom(f[0]), player: f[1] || "", light1: f[3] || "", light2: f[5] || "" };
+  });
+}
+function writeRoomList() {
+  const auto = (id) => id ? (S.ha.states.find((e) => e.entity_id === id)?.attributes?.friendly_name || shortName(id)) : "";
+  S.settings.rooms = S.rooms.slice(0, 4).map((r) => [
+    cleanRoom(r.name) || "Room", cleanRoom(r.player), auto(r.player),
+    cleanRoom(r.light1), auto(r.light1), cleanRoom(r.light2), auto(r.light2),
+  ].join(";")).join("|");
+  if (S.settings.room_at >= S.rooms.length) S.settings.room_at = 0;
+  const here = S.rooms[S.settings.room_at];
+  if (here) S.settings.room = cleanRoom(here.name);   // the top of the screen shows the room it sits in
+}
+// The Sticky's own "Room" text entity, as Home Assistant sees it: what the
+// presence automations write. The firmware always offers one when rooms exist.
+function roomTextEntity() {
+  if (S.presence.entity) return S.presence.entity;
+  const c = S.ha.states.filter((e) => e.entity_id.startsWith("text.") && /\bRoom$/i.test(e.attributes?.friendly_name || ""));
+  const mine = c.find((e) => e.entity_id.includes(roomSlug(S.info?.name))) || (c.length === 1 ? c[0] : null);
+  return mine ? mine.entity_id : "";
+}
+// One automation per room, ready to paste. Room presence in Home Assistant is
+// zone-based; the Sticky only obeys the name it is given, so any presence
+// setup (zones, sensors, blueprints) can drive it the same way.
+function presenceYaml() {
+  const ent = roomTextEntity() || "text.your_sticky_room";
+  const who = S.presence.person || "person.your_name";
+  return S.rooms.map((r, i) =>
+    `# The Sticky in ${cleanRoom(r.name) || "this room"} follows ${who.split(".")[1] || "someone"}\n` +
+    `alias: ${cleanRoom(r.name) || "Room"} — Sticky follows\n` +
+    `triggers:\n` +
+    `  - trigger: zone\n` +
+    `    entity_id: ${who}\n` +
+    `    zone: ${S.presence.zones[i] || "zone." + (roomSlug(r.name) || "living_room")}\n` +
+    `    event: enter\n` +
+    `actions:\n` +
+    `  - action: text.set_value\n` +
+    `    target:\n` +
+    `      entity_id: ${ent}\n` +
+    `    data:\n` +
+    `      value: "${cleanRoom(r.name) || "Room"}"`).join("\n\n");
+}
 const shortName = (id) => {
   const e = S.ha.states.find((x) => x.entity_id === id);
   return e ? name(e) : id.split(".")[1]?.replace(/_/g, " ") || "";
@@ -884,6 +1029,8 @@ async function connect() {
     S.updated = false; S.finished = false;
     S.flow = "setup"; S.skipped.clear(); S.wifi.change = false;
     if (i?.settings) Object.assign(S.settings, Object.fromEntries(Object.entries(i.settings).filter(([, v]) => v !== "")));
+    S.rooms = parseRoomList(S.settings.rooms);
+    S.presence = { on: false, person: "", entity: "", zones: {} };
     // No Sticky Remote yet, or an older one that isn't set up: the installer.
     // Up to date and not set up: straight on. Set up: its menu.
     S.installPanel = !i || (!i.configured && newer(S.manifest?.version, i.fw));

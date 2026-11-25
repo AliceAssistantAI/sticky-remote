@@ -25,6 +25,7 @@ open the setup page, connect the Sticky over USB for the settings, and pick
 | Area | What it does | Home Assistant |
 |---|---|---|
 | Top tiles | One or two lights — tap toggles, press and hold opens a brightness slider and your scenes — and the player's power | `light.toggle`, `light.turn_on`, `scene.turn_on`, `remote.turn_on/off` |
+| Rooms | Optional: up to four room profiles on one Sticky (its player, its lights). Press and hold the room name to pick another; with room presence, Home Assistant moves it for you | a `Room` text entity (presence automations write the room's name), that room's `media_player` and `light` entities |
 | Pad | ↑ ↓ ← → and OK, with on-screen feedback. Hold an arrow to repeat it | `remote.send_command` `DPAD_UP`/`DPAD_DOWN`/`DPAD_LEFT`/`DPAD_RIGHT`/`DPAD_CENTER` |
 | Keys | Back, Home, the app button (e.g. YouTube), Play/Pause | `remote.send_command` `BACK`/`HOME`, `remote.turn_on` with the app name, `media_play_pause` |
 | What's playing | A small artwork (dithered), title, series/episode or artist, app | `media_player` attributes |
@@ -213,13 +214,22 @@ newline-delimited JSON lines with `"sticky":"setup"`.
 - `{"sticky":"setup","cmd":"unpair"}` makes the Sticky forget the encryption
   key Home Assistant gave it, so Home Assistant can add it afresh.
 - The info line's `caps` lists what the firmware supports beyond the first
-  protocol (`scan`, `touch_sound`, `sleep_after`, `sleep_clock`, `unpair`); the setup page hides what's missing.
+  protocol (`scan`, `touch_sound`, `sleep_after`, `sleep_clock`, `unpair`,
+  `scenes`, `rooms`); the setup page hides what's missing.
 - Development builds (`touch_calibration: "true"`) add
   `{"sticky":"setup","cmd":"calibrate"}` and `{"sticky":"setup","cmd":"touch_reset"}`.
   The info line's `touch` object gives the map in use and its source.
 - Setting fields: `player remote player_name app app_label light1 light1_name
-  light1_icon light2 light2_name light2_icon scenes room ha_url font_set`. Icons are
+  light1_icon light2 light2_name light2_icon scenes room ha_url font_set
+  rooms room_at`. Icons are
   `bulb`, `ceiling`, `floor` or `star`; `font_set` is `inter` or `trmnl`.
+  `rooms` carries up to four room profiles as
+  `Name;player;player name;light1;its name;light2;its name|...` and `room_at`
+  which of them this Sticky sits in; the entities of **every** room are
+  subscribed at boot, so switching a room is one repaint from the cache. The
+  Sticky publishes its room as a Home Assistant `text` entity named "Room":
+  presence automations just `text.set_value` the room's name (the setup page
+  generates the automations, zone-based or from any presence sensor you like).
   `touch_sound` (`off`, `quiet`, `normal`), `sleep_after` (`1`, `3`, `10`,
   `30` minutes, or `never`) and `sleep_clock` (`on`, `off`) are accepted in
   `settings` too.

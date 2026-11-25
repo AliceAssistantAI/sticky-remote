@@ -281,3 +281,7 @@ summary:hover { color: var(--ink); }
 /* Scene checkboxes in the Lights card */
 .field .pick { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-weight: 400; }
 .field .pick input { margin: 0; }
+
+/* room-presence automation YAML */
+.yaml { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow: auto;
+        font: 12px/1.55 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre; margin: 10px 0; }

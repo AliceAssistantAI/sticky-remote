@@ -3,6 +3,11 @@
 Each version's first list is what the Sticky shows on its update screen
 (short lines, plain characters); web/build.sh puts it in the update manifest.
 
+## 0.8.3
+
+- Rooms: press and hold the room name at the top and pick another. One Sticky, a profile per room: its TV, its lights.
+- Optional room presence: Home Assistant moves the Sticky to wherever its people are. The setup page builds the automations. Pressing the room name always works by hand.
+
 ## 0.8.2
 
 - Press and hold a light: a card opens with on/off, a brightness slider (tap where you want it) and your scenes. A quick tap still just toggles.
