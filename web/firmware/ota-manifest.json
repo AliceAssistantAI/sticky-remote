@@ -1,14 +1,14 @@
 {
   "name": "Sticky Remote",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "path": "https://github.com/AliceAssistantAI/sticky-remote/releases/download/v0.8.2/sticky-remote-0.8.2.ota.bin",
-        "md5": "b87298fd429696da2255ebff822dc560",
-        "release_url": "https://github.com/AliceAssistantAI/sticky-remote/releases/tag/v0.8.2",
-        "summary": "Press and hold a light: a card opens with on/off, a brightness slider (tap where you want it) and your scenes. A quick tap still just toggles.\nThe setup page picks the scenes: tick up to six from your Home Assistant; they reach the Sticky over USB."
+        "path": "https://github.com/AliceAssistantAI/sticky-remote/releases/download/v0.8.3/sticky-remote-0.8.3.ota.bin",
+        "md5": "968fcf73f4c111a022a5e3b4c46cf883",
+        "release_url": "https://github.com/AliceAssistantAI/sticky-remote/releases/tag/v0.8.3",
+        "summary": "Rooms: press and hold the room name at the top and pick another. One Sticky, a profile per room: its TV, its lights.\nOptional room presence: Home Assistant moves the Sticky to wherever its people are. The setup page builds the automations. Pressing the room name always works by hand."
       }
     }
   ]
