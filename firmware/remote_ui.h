@@ -1343,7 +1343,7 @@ struct RoomPick { int x0, y0, x1, y1, n, row0; };
 
 inline RoomPick room_pick_geom(const Model &m) {
   const int n = room_count(m.rooms);
-  const int w = 520;
+  const int w = 400;   // the light dialog's width: same margins on both cards
   const int h = RP_PAD + RP_TITLE_H + (n > 0 ? n * RP_ROW_H + (n - 1) * RP_ROW_GAP + RP_PAD : 0);
   const int x0 = (W - w) / 2, y0 = (H - h) / 2;
   return {x0, y0, x0 + w, y0 + h, n, y0 + RP_PAD + RP_TITLE_H};
