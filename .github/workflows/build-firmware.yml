@@ -87,12 +87,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web/firmware/manifest.json web/firmware/ota-manifest.json
-          git commit -m "Firmware v$VERSION: web and OTA manifests for the GitHub build"
+          # a re-run finds the manifests already committed; that is not an error
+          git diff --cached --quiet || git commit -m "Firmware v$VERSION: web and OTA manifests for the GitHub build"
           git push origin "HEAD:${{ github.ref_name }}"
           SHA=$(git rev-parse HEAD)
           python3 web/release_notes.py "$VERSION" > /tmp/notes.md
-          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
-            --title "v$VERSION" --notes-file /tmp/notes.md \
+          # api.github.com answers occasional 500s; retry, then top up any assets
+          if ! gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            for i in 1 2 3 4 5; do
+              gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+                --title "v$VERSION" --notes-file /tmp/notes.md \
+                out/sticky-remote-$VERSION.factory.bin out/sticky-remote-$VERSION.ota.bin \
+                out/sticky-remote-latest.factory.bin out/sticky-remote-latest.ota.bin \
+                out/ota-manifest.json && break
+              [ "$i" = 5 ] && exit 1
+              sleep $((i * 10))
+            done
+          fi
+          gh release upload "v$VERSION" --repo "$GITHUB_REPOSITORY" --clobber \
             out/sticky-remote-$VERSION.factory.bin out/sticky-remote-$VERSION.ota.bin \
             out/sticky-remote-latest.factory.bin out/sticky-remote-latest.ota.bin \
             out/ota-manifest.json
@@ -101,4 +113,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.rel.outputs.version }}
-        run: gh workflow run deploy-site.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" -f tag="v$VERSION"
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            gh workflow run deploy-site.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" -f tag="v$VERSION" && break
+            [ "$i" = 5 ] && exit 1
+            sleep $((i * 10))
+          done
