@@ -6,7 +6,7 @@
       "chipFamily": "ESP32-S3",
       "ota": {
         "path": "https://github.com/AliceAssistantAI/sticky-remote/releases/download/v0.8.3/sticky-remote-0.8.3.ota.bin",
-        "md5": "968fcf73f4c111a022a5e3b4c46cf883",
+        "md5": "80bf7843e63bf167eb6338f6b394452d",
         "release_url": "https://github.com/AliceAssistantAI/sticky-remote/releases/tag/v0.8.3",
         "summary": "Rooms: press and hold the room name at the top and pick another. One Sticky, a profile per room: its TV, its lights.\nOptional room presence: Home Assistant moves the Sticky to wherever its people are. The setup page builds the automations. Pressing the room name always works by hand."
       }
