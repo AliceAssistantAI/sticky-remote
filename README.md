@@ -235,7 +235,7 @@ newline-delimited JSON lines with `"sticky":"setup"`.
   subscribed at boot, so switching a room is one repaint from the cache. The
   Sticky publishes its room as a Home Assistant `text` entity named "Room":
   presence automations just `text.set_value` the room's name (the setup page
-  generates the automations, zone-based or from any presence sensor you like).
+  generates the automations, area-based or from any presence sensor you like).
   `touch_sound` (`off`, `quiet`, `normal`), `sleep_after` (`1`, `3`, `10`,
   `30` minutes, or `never`) and `sleep_clock` (`on`, `off`) are accepted in
   `settings` too.

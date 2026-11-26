@@ -6,6 +6,7 @@ Each version's first list is what the Sticky shows on its update screen
 ## 0.8.5
 
 - Scenes follow the room: the setup page remembers which rooms each scene belongs to, and the light card only shows the scenes that live in the room you are in.
+- Room presence now keys off Home Assistant **areas**: wherever a motion or occupancy sensor trips, the Sticky moves there. The presence-sensor mode (ESPresense, Room Assistant…) is unchanged.
 
 ## 0.8.4
 
@@ -19,7 +20,7 @@ Each version's first list is what the Sticky shows on its update screen
 ## 0.8.3
 
 - Rooms: press and hold the room name at the top and pick another. One Sticky, a profile per room: its TV, its lights.
-- Optional room presence: Home Assistant moves the Sticky to wherever its people are. The setup page builds the automations. Pressing the room name always works by hand.
+- Optional room presence: Home Assistant moves the Sticky to the room people are in. The setup page builds the automations. Pressing the room name always works by hand.
 
 ## 0.8.2
 
