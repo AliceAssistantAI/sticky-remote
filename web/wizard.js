@@ -434,7 +434,7 @@ const VIEWS = [
       const skeys = Object.keys(S.ha.states || {}).filter((k) => /^(sensor|binary_sensor)\./.test(k));
       const smode = S.presence.mode === "sensor";
       const presenceBody = S.presence.on ? `
-        <div class="light-opts">
+        <div class="stacked">
           <label class="field"><span>The Sticky learns the room from</span><select id="presence-mode">
             <option value="zone" ${!smode ? "selected" : ""}>People entering zones</option>
             <option value="sensor" ${smode ? "selected" : ""}>Presence sensors — ESPresense, Room Assistant, beacons</option>

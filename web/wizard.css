@@ -223,6 +223,9 @@ code { font: 500 .92em ui-monospace, SFMono-Regular, Menlo, monospace; backgroun
 .seg.icons canvas { width: 34px; height: 34px; }
 .light + .light { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 2px; }
 .light-opts { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; }
+/* Presence card: every field full width — .light-opts' auto column would collapse fields to one char wide. */
+.stacked { margin-top: 4px; }
+.stacked .hint { margin: 10px 0; }
 @media (max-width: 520px) { .light-opts { grid-template-columns: 1fr; } }
 .card .hint { color: var(--mute); font-size: 13px; margin: -6px 0 10px; }
 details { margin-top: 6px; }
