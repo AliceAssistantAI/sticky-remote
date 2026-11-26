@@ -47,7 +47,8 @@ open the setup page, connect the Sticky over USB for the settings, and pick
   needs more than a fast partial refresh. The full refresh that clears
   e-paper ghosting waits until the Sticky has been left alone for 3 seconds.
 - **Sleep**: on battery it sleeps after 1, 3 (default), 10 or 30 minutes, or
-  never by itself; the AI button puts it to sleep at once and any button wakes
+  never by itself; a quick press of the AI button puts it to sleep at once, holding
+  it 5 seconds powers the device off (back to the Launcher), and any button wakes
   it. Asleep, the panel shows a dark screen, not the last state: by default a
   large **clock** with the date, which ticks once a minute (the Sticky dozes
   in light sleep in between, Wi-Fi off, and wakes for a second to move it).
@@ -63,7 +64,12 @@ open the setup page, connect the Sticky over USB for the settings, and pick
   checks its MD5 and restarts into it, keeping Wi-Fi, settings and the Home
   Assistant pairing. Below 30 % battery it asks to be plugged in first. Home
   Assistant shows the same update as the Sticky's *Firmware* entity and can
-  install it too.
+  install it too. An app installed **inside the Launcher** can't write its own
+  slot (its "peer" partition belongs to another app): it still shows the
+  update, but the card explains the way through the Launcher instead — delete
+  the app there and add the same URL again, which always serves the newest
+  build. Self-update attempts are refused before anything is written to flash.
+  A Sticky flashed with its factory image updates in-app as described.
 - **Artwork** loads in a background task: download (HTTPS with certificate
   checks) and JPEG decode at 1/2, 1/4 or 1/8 scale never hold up touch or the
   screen. Other formats fall back to ESPHome's `online_image`.

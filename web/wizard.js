@@ -32,7 +32,7 @@ const S = {
     room_at: 0,   // which of them this remote sits in
   },
   rooms: [],              // working copy of settings.rooms: {name, player, light1, light2}
-  presence: { on: false, person: "", entity: "", zones: {} },   // Home Assistant moves the Sticky
+  presence: { on: false, person: "", entity: "", zones: {}, mode: "zone", sensors: {}, reported: {} },   // HA moves the Sticky
   timers: [],
   attn: null,           // Home Assistant's side of the pairing (haAttention)
   unpaired: false,      // the Sticky was told once to forget a stale key
@@ -430,12 +430,28 @@ const VIEWS = [
         </div>`).join("");
       const ent = roomTextEntity();
       const persons = list("person");
+      const sens = list("sensor").concat(list("binary_sensor"));
+      const skeys = Object.keys(S.ha.states || {}).filter((k) => /^(sensor|binary_sensor)\./.test(k));
+      const smode = S.presence.mode === "sensor";
       const presenceBody = S.presence.on ? `
         <div class="light-opts">
-          ${persons.length && !manual ? `<label class="field"><span>Follow</span><select id="presence-person">
+          <label class="field"><span>The Sticky learns the room from</span><select id="presence-mode">
+            <option value="zone" ${!smode ? "selected" : ""}>People entering zones</option>
+            <option value="sensor" ${smode ? "selected" : ""}>Presence sensors — ESPresense, Room Assistant, beacons</option>
+          </select></label>
+          ${smode ? S.rooms.map((r, i) => {
+            const cur = S.presence.sensors[i] || "";
+            const rep = S.presence.reported[i] ?? cleanRoom(r.name);
+            return `<label class="field"><span>Sensor reporting ${esc(cleanRoom(r.name) || "this room")}</span>
+              <input type="text" list="presence-sensors" data-sensor="${i}" value="${esc(cur)}" placeholder="sensor.steven_location (comma-separate several)">
+              <small>Its state must be the room name it reports — ESPresense: set the room name with <b>roomPresenceUpdate</b>.</small></label>
+              <label class="field"><span>State it shows when you are in ${esc(cleanRoom(r.name) || "this room")}</span>
+              <input type="text" data-reported="${i}" value="${esc(rep)}"></label>`;
+          }).join("") + `<datalist id="presence-sensors">${skeys.map((k) => `<option value="${esc(k)}"></option>`).join("")}</datalist>` : ""}
+          ${!smode && persons.length && !manual ? `<label class="field"><span>Follow</span><select id="presence-person">
               <option value="">Choose a person…</option>
               ${persons.map((e) => `<option value="${esc(e.entity_id)}" ${e.entity_id === S.presence.person ? "selected" : ""}>${esc(name(e))}</option>`).join("")}</select></label>` : ""}
-          ${manual || !list("zone").length ? "" : S.rooms.map((r, i) => {
+          ${smode || manual || !list("zone").length ? "" : S.rooms.map((r, i) => {
             const zl = list("zone"), guess = "zone." + (roomSlug(r.name) || "living_room");
             const cur = S.presence.zones[i] || (zl.some((z) => z.entity_id === guess) ? guess : "");
             return `<label class="field"><span>Zone for ${esc(cleanRoom(r.name) || "this room")}</span><select data-zone="${i}">
@@ -446,7 +462,7 @@ const VIEWS = [
             <input type="text" id="presence-entity" value="${esc(ent)}" placeholder="text.…_room">
             <small>${ent ? `Found on your Home Assistant: <b>${esc(ent)}</b>.`
               : "Not found yet: save the Sticky, let Home Assistant pick the integration up, then reload this page — or type the entity id."}</small></label>
-          <p class="hint">One automation per room. In Home Assistant: <b>Settings › Automations &amp; scenes</b> → <b>Create automation</b> → ⋮ → <b>Edit in YAML</b> → paste one block → <b>Save</b>; repeat per room. Wherever the person enters the zone, the Sticky moves to that room. Any presence setup works — zones, sensors, blueprints: they all just write the room's name.</p>
+          <p class="hint">One automation per room. In Home Assistant: <b>Settings › Automations &amp; scenes</b> → <b>Create automation</b> → ⋮ → <b>Edit in YAML</b> → paste one block → <b>Save</b>; repeat per room. Wherever the person enters the zone, the Sticky moves to that room. With presence sensors (ESPresense, Room Assistant…), one automation per room fires the moment the sensor reports that room's name.</p>
           <pre class="yaml" id="presence-yaml">${esc(presenceYaml())}</pre>
           <button class="link" id="presence-copy">Copy these automations</button>
           <p class="hint">Without the automations the Sticky simply stays where you left it — press and hold its room name to move it by hand.</p>
@@ -592,6 +608,9 @@ const VIEWS = [
         }));
         $("#room-at")?.addEventListener("change", (e) => { S.settings.room_at = +e.target.value; writeRoomList(); preview(); render(); });
         $("#presence")?.addEventListener("change", (e) => { S.presence.on = e.target.checked; render(); });
+        $("#presence-mode")?.addEventListener("change", (e) => { S.presence.mode = e.target.value; render(); });
+        document.querySelectorAll("[data-sensor]").forEach((el) => el.addEventListener("input", () => { S.presence.sensors[+el.dataset.sensor] = el.value.trim(); }));
+        document.querySelectorAll("[data-reported]").forEach((el) => el.addEventListener("input", () => { S.presence.reported[+el.dataset.reported] = el.value; }));
         $("#presence-person")?.addEventListener("change", (e) => { S.presence.person = e.target.value; render(); });
         document.querySelectorAll("[data-zone]").forEach((el) => el.addEventListener("change", () => { S.presence.zones[+el.dataset.zone] = el.value; render(); }));
         $("#presence-entity")?.addEventListener("input", (e) => { S.presence.entity = e.target.value.trim(); });
@@ -990,6 +1009,28 @@ function roomTextEntity() {
 // setup (zones, sensors, blueprints) can drive it the same way.
 function presenceYaml() {
   const ent = roomTextEntity() || "text.your_sticky_room";
+  if (S.presence.mode === "sensor") {
+    const write = (room) =>
+      `  - action: text.set_value\n` +
+      `    target:\n` +
+      `      entity_id: ${ent}\n` +
+      `    data:\n` +
+      `      value: "${room}"`;
+    return S.rooms.map((r, i) => {
+      const room = cleanRoom(r.name) || "Room";
+      const ids = (S.presence.sensors[i] || "").split(/[\s,]+/).filter(Boolean);
+      const list = (ids.length ? ids : ["sensor.your_presence_sensor"]).map((x) => `        - ${x}`).join("\n");
+      const rep = S.presence.reported[i] ?? room;
+      return `# The Sticky moves to ${room} when a presence sensor reports it (ESPresense, Room Assistant, beacons)\n` +
+        `alias: ${room} — Sticky follows\n` +
+        `triggers:\n` +
+        `  - trigger: state\n` +
+        `    entity_id:\n` +
+        list + "\n" +
+        `    to: "${rep}"\n` +
+        `actions:\n` + write(room);
+    }).join("\n\n");
+  }
   const who = S.presence.person || "person.your_name";
   return S.rooms.map((r, i) =>
     `# The Sticky in ${cleanRoom(r.name) || "this room"} follows ${who.split(".")[1] || "someone"}\n` +
@@ -1030,7 +1071,7 @@ async function connect() {
     S.flow = "setup"; S.skipped.clear(); S.wifi.change = false;
     if (i?.settings) Object.assign(S.settings, Object.fromEntries(Object.entries(i.settings).filter(([, v]) => v !== "")));
     S.rooms = parseRoomList(S.settings.rooms);
-    S.presence = { on: false, person: "", entity: "", zones: {} };
+    S.presence = { on: false, person: "", entity: "", zones: {}, mode: "zone", sensors: {}, reported: {} };
     // No Sticky Remote yet, or an older one that isn't set up: the installer.
     // Up to date and not set up: straight on. Set up: its menu.
     S.installPanel = !i || (!i.configured && newer(S.manifest?.version, i.fw));

@@ -36,6 +36,7 @@ static const char *str(Do d) {
     case Do::BUTTON: return "BUTTON";
     case Do::SLEEP: return "SLEEP";
     case Do::CALIBRATE: return "CALIBRATE";
+    case Do::POWER_OFF: return "POWER_OFF";
   }
   return "?";
 }
@@ -61,12 +62,12 @@ static void buttons_while_awake() {
   CHECK(on_press({60000, 0, false, false}, Press::AI) == Do::BUTTON);
   CHECK(on_press({60000, 0, false, false}, Press::UP) == Do::BUTTON);
   CHECK(on_press({60000, 0, false, false}, Press::DOWN) == Do::BUTTON);
-  CHECK(on_press({60000, 0, false, false}, Press::AI_HOLD) == Do::SLEEP);
+  CHECK(on_press({60000, 0, false, false}, Press::AI_HOLD) == Do::POWER_OFF);
   CHECK(on_press({60000, 0, false, false}, Press::DOWN_HOLD) == Do::CALIBRATE);
 
   test_case("awake, a button woke it long ago: presses act");
   CHECK(on_press({60000, 10000, false, false}, Press::AI) == Do::BUTTON);
-  CHECK(on_press({60000, 10000, false, false}, Press::AI_HOLD) == Do::SLEEP);
+  CHECK(on_press({60000, 10000, false, false}, Press::AI_HOLD) == Do::POWER_OFF);
 
   test_case("the press that started it up (deep sleep restarts it) only wakes it");
   for (uint32_t now : {0u, 100u, 1999u}) {
@@ -81,7 +82,7 @@ static void buttons_while_awake() {
 
   test_case("a hold that began at start-up doesn't send it back to sleep");
   CHECK(on_press({2499, 0, false, false}, Press::AI_HOLD) == Do::NOTHING);
-  CHECK(on_press({2500, 0, false, false}, Press::AI_HOLD) == Do::SLEEP);
+  CHECK(on_press({2500, 0, false, false}, Press::AI_HOLD) == Do::POWER_OFF);
 
   test_case("the press that woke it from a doze only wakes it (1.5 s)");
   const uint32_t w = 100000;
@@ -96,7 +97,7 @@ static void buttons_while_awake() {
   test_case("holding the waking press doesn't put it straight back to sleep (2.5 s)");
   CHECK(on_press({w + 1500, w, false, false}, Press::AI_HOLD) == Do::NOTHING);
   CHECK(on_press({w + 2500, w, false, false}, Press::AI_HOLD) == Do::NOTHING);
-  CHECK(on_press({w + 2501, w, false, false}, Press::AI_HOLD) == Do::SLEEP);
+  CHECK(on_press({w + 2501, w, false, false}, Press::AI_HOLD) == Do::POWER_OFF);
 
   test_case("millis() wrapping round (49.7 days) doesn't block the buttons");
   const uint32_t near_wrap = 0xFFFFFF00u;
@@ -228,7 +229,8 @@ struct Device {
   bool sleeping = false, dozing = false, face_clock = false;
   bool sleep_script = false;    // go_to_sleep is running (waiting for unplug)
   bool deep = false;            // in deep sleep
-  int restarts = 0, volume_steps = 0, sleeps = 0, wakes = 0;
+  int restarts = 0, volume_steps = 0, sleeps = 0, wakes = 0, power_offs = 0;
+  bool powered = true;            // released latch: the device dies
   std::vector<std::string> log;
 
   void advance(uint32_t dt) {
@@ -292,6 +294,7 @@ struct Device {
       case Do::WAKE: wake_up(); break;
       case Do::SLEEP: go_to_sleep(); break;
       case Do::CALIBRATE: break;
+      case Do::POWER_OFF: powered = false; power_offs++; log.push_back("power off"); break;
       case Do::BUTTON:
         if (p == Press::AI) go_to_sleep();          // remote_ui::handle_button: AI sleeps
         else if (!in_setup) volume_steps += p == Press::UP ? 1 : -1;
@@ -362,11 +365,23 @@ static void scenarios() {
     CHECK(d.volume_steps == 1);
   }
 
+  test_case("AI: a quick press sleeps, a 5 s hold powers off");
+  {
+    Device d;
+    d.press(Press::AI);
+    CHECK(d.dozing || d.sleeping);          // a quick press: asleep
+    d.tap_to_wake_from_doze(Press::UP);
+    d.advance(6000);                        // past any wake guard
+    d.press(Press::AI_HOLD);
+    CHECK(d.power_offs == 1 && !d.powered); // the hold kills power, no sleep, no restart
+    CHECK(d.sleeps == 1);
+  }
+
   test_case("scenario: sleep and wake ten times in a row, every button");
   {
     Device d;
     for (int i = 0; i < 10; i++) {
-      d.press(i % 2 ? Press::AI : Press::AI_HOLD);
+      d.press(Press::AI);
       CHECK(d.dozing);
       d.minute_passes();
       d.tap_to_wake_from_doze(i % 3 == 0 ? Press::AI : i % 3 == 1 ? Press::UP : Press::DOWN);

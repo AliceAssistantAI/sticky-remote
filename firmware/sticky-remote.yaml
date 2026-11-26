@@ -20,7 +20,7 @@ substitutions:
   # "true" appends the MAC's last bytes to the name (sticky-remote-a1b2c3), so
   # several Stickies can live in one home. The generic firmware sets it.
   name_add_mac_suffix: "false"
-  firmware_version: "0.8.3"
+  firmware_version: "0.8.4"
 
   # --- Defaults for the device settings (overridden by settings sent over USB)
   # Scenes the light dialog (press and hold a light) offers, as
@@ -125,6 +125,15 @@ esphome:
             d.font_set = "${font_set}";
             d.scenes = "${light_scenes}";
             sticky::load();
+            if (sticky::hosted_by_launcher()) {
+              // Installed by the Launcher app: the peer OTA slot belongs to a
+              // different app, so self-update is switched off here for good
+              // (UI hides Install, and the OTA URL goes empty so even a Home
+              // Assistant install attempt fails before it touches flash).
+              ESP_LOGI("update", "Launcher slot: self-update disabled — update it from the Launcher");
+              remote_ui::apply("update_hosted", "1");
+              id(ota_github).set_url("");
+            }
             remote_ui::calibration_enabled() = ${touch_calibration};
             sticky::set_default_touch_cal("${touch_map}");
             sticky::load_touch_cal();
@@ -466,7 +475,8 @@ binary_sensor:
           id(last_activity) = millis();
           remote_ui::request();
 
-  # Physical buttons: AI/power = sleep now, up/down = volume; any wakes it.
+  # Physical buttons: AI = sleep (quick press) / power off (5 s hold),
+  # up/down = volume; any wakes it.
   # What each press does is decided in sleep_logic::on_press (tested).
   - platform: gpio
     id: button_ai
@@ -478,12 +488,12 @@ binary_sensor:
       inverted: true
     on_multi_click:
       - timing:
-          - ON for at most 1.5s
+          - ON for at most 4.95s
           - OFF for at least 50ms
         then:
           - script.execute: { id: press, which: 0 }
       - timing:
-          - ON for at least 1.5s
+          - ON for at least 5s
         then:
           - script.execute: { id: press, which: 1 }
   - platform: gpio
@@ -659,8 +669,9 @@ script:
           const auto p = (sleep_logic::Press) which;
           const sleep_logic::Awake a{millis(), id(woke_at), remote_ui::model().sleeping, id(dozing)};
           const Do d = sleep_logic::on_press(a, p);
-          static const char *const NAMES[] = {"AI", "AI held", "Up", "Down", "Down held"};
-          static const char *const DOS[] = {"nothing (it just woke)", "wake", "act", "sleep", "calibrate"};
+          static const char *const NAMES[] = {"AI", "AI held 5 s", "Up", "Down", "Down held"};
+          static const char *const DOS[] = {"nothing (it just woke)", "wake", "act", "sleep", "calibrate",
+                                            "power off"};
           ESP_LOGI("buttons", "%s: %s (asleep %d, dozing %d)", NAMES[which], DOS[(int) d], a.sleeping, a.dozing);
           id(last_activity) = millis();
           switch (d) {
@@ -668,6 +679,7 @@ script:
             case Do::WAKE: id(wake_up).execute(); break;
             case Do::SLEEP: id(go_to_sleep).execute(); break;
             case Do::CALIBRATE: remote_ui::calib_start(); break;
+            case Do::POWER_OFF: id(power_off).execute(); break;
             case Do::BUTTON: {
               auto t = id(ha_time).now();
               const auto b = p == sleep_logic::Press::UP ? remote_ui::BTN_UP
@@ -676,6 +688,22 @@ script:
               break;
             }
           }
+
+  # Powered off (AI held 5 s): release the latch that keeps the Stamp alive.
+  # The e-paper keeps whatever was on it; the panel draws nothing on the way
+  # out (a refresh takes longer than the latch takes to drop). On USB the rail
+  # stays up — then it dozes instead of hanging half-alive; a power-on from
+  # there boots back into the Launcher, as from the wall.
+  - id: power_off
+    mode: single
+    then:
+      - logger.log: "AI held 5 s: releasing the power latch"
+      - script.stop: go_to_sleep
+      - script.stop: face_drawn
+      - output.turn_off: pwr_lock
+      - output.turn_off: pwr_hold
+      - delay: 600ms
+      - deep_sleep.enter: deep_sleep_ctl
 
   # Asleep: draw the face, then doze with the clock or deep-sleep, as
   # sleep_logic::asleep_path says. On USB it can't deep-sleep: the face stays

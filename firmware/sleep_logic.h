@@ -17,8 +17,8 @@ constexpr uint32_t HOLD_AFTER_WAKE_MS = 2500;
 
 // --- Buttons -------------------------------------------------------------------
 enum class Press {
-  AI,         // AI/power, released within 1.5 s
-  AI_HOLD,    // AI/power, held 1.5 s
+  AI,         // AI/power, released before 5 s
+  AI_HOLD,    // AI/power, held 5 s or more: power off
   UP,
   DOWN,
   DOWN_HOLD,  // Down held 3 s (touch calibration, development builds)
@@ -30,6 +30,7 @@ enum class Do {
   BUTTON,     // its normal job (remote_ui::handle_button: AI sleeps, Up/Down volume)
   SLEEP,      // asleep now
   CALIBRATE,  // touch calibration
+  POWER_OFF,  // release the power latch: the device dies, back to the Launcher
 };
 
 struct Awake {
@@ -52,7 +53,7 @@ inline Do on_press(const Awake &a, Press p) {
       return just_woke(a) ? Do::NOTHING : Do::BUTTON;
     case Press::AI_HOLD:
       if (a.now_ms < HOLD_AFTER_WAKE_MS) return Do::NOTHING;
-      return a.woke_at != 0 && a.now_ms - a.woke_at <= HOLD_AFTER_WAKE_MS ? Do::NOTHING : Do::SLEEP;
+      return a.woke_at != 0 && a.now_ms - a.woke_at <= HOLD_AFTER_WAKE_MS ? Do::NOTHING : Do::POWER_OFF;
     case Press::DOWN_HOLD:
       return Do::CALIBRATE;
   }

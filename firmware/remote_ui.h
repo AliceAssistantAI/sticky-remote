@@ -147,6 +147,7 @@ struct Model {
   bool update_prompt = false;     // the update screen is up
   enum class Upd : uint8_t { IDLE, INSTALLING, DONE, FAILED } update_step = Upd::IDLE;
   int update_progress = -1;       // 0..100 while installing, -1: not known yet
+  bool update_hosted = false;     // installed by the Launcher: it updates there, not here
   int dow = 0, day = 0, month = 0;   // the local date, for the sleep clock (0: unknown)
   Page page = Page::REMOTE;   // always Remote since 0.5.0 (one page); kept for the engine's API
   bool state_seen = false;
@@ -1146,12 +1147,21 @@ inline void draw_update(Ctx &c, const Model &m) {
     }
     if (cut) c.it.print(tx + 18, y, c.f.t18, c.ink, TextAlign::TOP_LEFT, "… and more on GitHub");
   }
-  print_wrapped(c, tx, note_y, c.f.t18, c.ink,
-                m.update_step == Model::Upd::FAILED ? "The last try failed (download or check). Nothing changed."
-                                                    : "About a minute. Wi-Fi, settings and pairing are kept.",
-                tw, 23);
+  if (!m.update_hosted)
+    print_wrapped(c, tx, note_y, c.f.t18, c.ink,
+                  m.update_step == Model::Upd::FAILED ? "The last try failed (download or check). Nothing changed."
+                                                      : "About a minute. Wi-Fi, settings and pairing are kept.",
+                  tw, 23);
   const int bx = M + 30, bw = W - 2 * M - 60;
-  if (update_can_install(m)) {
+  if (m.update_hosted) {
+    // A Launcher slot can't be written by its own app: say where the button
+    // went. The favorite's URL serves the newest build, so re-adding the
+    // app from the Launcher brings this update.
+    print_wrapped(c, bx, 508, c.f.t20, c.ink,
+                  "Installed as a Launcher app: it can't update itself. In the Launcher, delete this app and add "
+                  "it again with the same URL: the newest version is served.",
+                  bw, 28);
+  } else if (update_can_install(m)) {
     fill_rrect(c, bx, UPD_INSTALL_Y, bw, UPD_BTN_H, 18, c.ink);
     c.it.print(W / 2, UPD_INSTALL_Y + UPD_BTN_H / 2, c.f.t26, c.paper, TextAlign::CENTER,
                m.update_step == Model::Upd::FAILED ? "Try again" : "Install");
@@ -1509,7 +1519,8 @@ inline Action hit(const Model &m, int x, int y, int64_t now_epoch, float &seek_t
   if (m.in_setup()) return NONE;
   if (m.update_prompt) {
     if (m.update_step == Model::Upd::INSTALLING) return NONE;
-    if (update_can_install(m) && in(x, y, M + 30, UPD_INSTALL_Y - 10, W - 2 * M - 60, UPD_BTN_H + 20)) return UPDATE_INSTALL;
+    if (update_can_install(m) && !m.update_hosted &&
+        in(x, y, M + 30, UPD_INSTALL_Y - 10, W - 2 * M - 60, UPD_BTN_H + 20)) return UPDATE_INSTALL;
     if (in(x, y, M + 30, UPD_CLOSE_Y - 10, W - 2 * M - 60, UPD_BTN_H + 20)) return UPDATE_CLOSE;
     return NONE;
   }
@@ -1708,6 +1719,9 @@ inline void apply(const std::string &key, const std::string &v) {
   } else if (key == "fw_version") {
     m.fw_version = v;
     return;
+  } else if (key == "update_hosted") {   // the Launcher installed this app
+    m.update_hosted = v == "1";
+    return request(true);
   } else if (key == "update_version") {   // empty: none available
     if (v == m.update_version) return;
     m.update_version = v;

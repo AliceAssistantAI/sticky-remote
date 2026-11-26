@@ -22,6 +22,10 @@
 // The board also sends the info line ("event":"hello") once at boot. Send at
 // most 64 bytes every ~10 ms: the receive buffer is small.
 
+#ifdef USE_ESP_IDF
+#include <esp_partition.h>  // hosted_by_launcher: reading the partition table
+#endif
+
 #include <algorithm>
 #include <cstring>
 #include <functional>
@@ -925,6 +929,38 @@ constexpr int64_t UPDATE_CHECK_EVERY_S = 6 * 3600;
 RTC_DATA_ATTR static int64_t s_last_update_check = 0;
 
 /// True when a check is due (and counts it as done); `now` is epoch seconds.
+// True when this app runs inside a Launcher app slot (the "Launcher" app
+// ecosystem: Launcher itself plus installed apps, no A/B pair). It always
+// keeps one app partition of subtype "test" for itself; a stock ESPHome
+// partition table has none, so finding one means we are a guest.
+// Guests must never self-OTA: ESPHome's OTA writes the "peer" slot, which
+// here is some other installed app's partition — it would flash that app
+// away, and a reboot lands back in the Launcher anyway (its patched
+// bootloader boots Launcher on power-on, and apps only through its menu).
+// Updates then happen in the Launcher: re-downloading the favorite's URL
+// (sticky-remote-latest.ota.bin) installs the new version.
+inline bool hosted_by_launcher() {
+#ifdef USE_ESP_IDF
+  static int cached = -1;
+  if (cached < 0) {
+    cached = 0;
+    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, nullptr);
+    while (it != nullptr) {
+      const esp_partition_t *p = esp_partition_get(it);
+      if (p != nullptr && p->subtype >= 0x20 && p->subtype <= 0x2F) {  // app subtype "test"
+        cached = 1;
+        break;
+      }
+      it = esp_partition_next(it);
+    }
+    esp_partition_iterator_release(it);
+  }
+  return cached == 1;
+#else
+  return false;
+#endif
+}
+
 inline bool update_check_due(int64_t now) {
   if (now < 1600000000) return false;   // no clock yet
   if (s_last_update_check > 0 && now - s_last_update_check < UPDATE_CHECK_EVERY_S && now >= s_last_update_check)
