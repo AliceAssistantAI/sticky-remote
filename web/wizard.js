@@ -41,6 +41,18 @@ const S = {
 };
 
 const $ = (sel) => document.querySelector(sel);
+// "com.google.android.youtube.tv" -> "Open YouTube TV": same reshaping the
+// firmware does, so the app key's label always fits the tile.
+const appKeyLabel = (a) => {
+  if (!a) return "";
+  const isPkg = /^[a-z0-9_]+(.[a-z0-9_]+)+$/i.test(a) && a.includes(".");
+  const name = isPkg
+    ? a.split(".").filter((s) => !/^(com|org|net|io|co|inc|google|android|apps|app)$/i.test(s))
+        .map((s) => (s.length <= 3 ? s.toUpperCase() : s[0].toUpperCase() + s.slice(1))).join(" ") || a
+    : a;
+  return `Open ${name}`;
+};
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const newer = (a, b) => { // is version a newer than b?
@@ -514,9 +526,17 @@ const VIEWS = [
                 ${sources.length && !manual
                   ? `<label class="field"><span>App button opens</span><select data-k="app"><option value="">No app</option>
                       ${sources.map((x) => `<option ${x === s.app ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>`
-                  : text("app", "App button opens", "YouTube")}
+                  : `<label class="field"><span>App button opens</span>
+                      <input type="text" data-k="app" value="${esc(s.app)}" placeholder="com.google.android.youtube.tv" list="appids" autocomplete="off">
+                      <datalist id="appids">${["com.google.android.youtube.tv", "com.netflix.ninja",
+                        "com.amazon.amazonvideo.livingroom", "com.disney.disneyplus", "com.plexapp.android",
+                        "com.apple.tv", "com.spotify.tv.android", "org.xbmc.kodi", "tv.twitch.android.app",
+                      ].map((x) => `<option value="${x}">`).join("")}</datalist></label>`}
                 ${text("player_name", "Name on the power tile", "Android TV")}
-              </div>` : ""}
+              </div>
+              <p class="hint">Android TV's <b>app id</b>, not its display name: YouTube is
+                com.google.android.youtube.tv, Netflix is com.netflix.ninja. Find the id in Home Assistant
+                under the player entity's attributes (app_id) while the app is open.</p>` : ""}
             </section>
             <section class="card">
               <h3>Lights</h3>
@@ -600,7 +620,7 @@ const VIEWS = [
               s.player_name = s.player ? shortName(s.player) : "";
               const src = S.ha.states.find((e) => e.entity_id === s.player)?.attributes?.source_list || [];
               if (!src.includes(s.app)) s.app = "";
-              s.app_label = s.app ? `Open ${s.app}` : "";
+              s.app_label = appKeyLabel(s.app);
               return render();
             }
             if ((k === "light1" || k === "light2") && !manual) {
@@ -608,7 +628,7 @@ const VIEWS = [
               if (s[k]) s[k + "_icon"] = guessIcon(s[k]);
               return render();
             }
-            if (k === "app") s.app_label = s.app ? `Open ${s.app}` : "";
+            if (k === "app") s.app_label = appKeyLabel(s.app);
             preview();
           });
         });
@@ -655,7 +675,7 @@ const VIEWS = [
             : S.rooms.some((r) => !cleanRoom(r.name)) ? "Every room needs a name."
             : new Set(S.rooms.map((r) => cleanRoom(r.name).toLowerCase())).size !== S.rooms.length ? "Two rooms share a name — Home Assistant could not tell them apart." : "";
           if (err) { $("#remote-error").hidden = false; $("#remote-error").textContent = err; return; }
-          if (!s.app_label && s.app) s.app_label = `Open ${s.app}`;
+          if (!s.app_label && s.app) s.app_label = appKeyLabel(s.app);
           if (!s.player_name) s.player_name = "Player";
           if (!s.remote) s.remote = "remote." + s.player.split(".")[1];
           $("#remote-error").hidden = true;

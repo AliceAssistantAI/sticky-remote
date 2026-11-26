@@ -3,6 +3,16 @@
 Each version's first list is what the Sticky shows on its update screen
 (short lines, plain characters); web/build.sh puts it in the update manifest.
 
+## 0.8.6
+
+- Android / Google TV: the screen now shows the app that is open (YouTube, Netflix...) instead of "Nothing playing" with a long app id.
+- The app button now really opens the app on the TV. It used to launch through the TV's remote entity, whose name was guessed: a bad guess hit some other entity instead, like the room's lights.
+- The setup page asks for the app's Android id (com.google.android.youtube.tv) and suggests the common ones.
+
+### Details
+
+- The Android TV Remote integration reports only "on"/"off" for the player, never a playback state, so anything that is on with a real app in front now counts as playing: the transport keys and the seek bar appear, and the app's name is the headline. Launching goes through the player entity (play_media with type "app"), which the integration always pairs with the TV.
+
 ## 0.8.5
 
 - Scenes follow the room: the setup page remembers which rooms each scene belongs to, and the light card only shows the scenes that live in the room you are in.

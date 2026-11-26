@@ -6,6 +6,7 @@
 // ink (black).
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -121,6 +122,59 @@ enum class Press : uint8_t { NONE, UP, DOWN, LEFT, RIGHT, OK, KEY_BACK, KEY_HOME
 constexpr uint32_t PRESS_SHOW_MS = 1500;
 enum class Page { NOW, REMOTE };
 
+// Google TV / Android TV home screens and screensavers: while one of these is
+// in front you are "home", not "in an app".
+inline bool is_home_app(const std::string &a) {
+  return a.empty() || a.find("tvlauncher") != std::string::npos ||
+         a.find("apps.tv.launcherx") != std::string::npos ||
+         a.find("leanbacklauncher") != std::string::npos ||
+         a.find("screensaver") != std::string::npos || a == "com.android.tv";
+}
+
+// "com.google.android.youtube.tv" -> "YouTube TV". Only reshapes things that
+// look like package ids; when the integration's app list knows the app it
+// already hands over a friendly name, which passes through untouched.
+inline std::string app_title(const std::string &a) {
+  if (a.find('.') == std::string::npos) return a;
+  static const char *const skip[] = {"com", "org", "net", "io", "co", "inc",
+                                     "google", "android", "apps", "app"};
+  std::vector<std::string> segs;
+  size_t pos = 0;
+  while (pos <= a.size()) {
+    const size_t dot = a.find('.', pos);
+    const std::string seg = a.substr(pos, dot == std::string::npos ? dot : dot - pos);
+    pos = dot == std::string::npos ? a.size() + 1 : dot + 1;
+    bool drop = seg.empty();
+    for (const char *s : skip)
+      if (seg == s) drop = true;
+    if (!drop) segs.push_back(seg);
+  }
+  // "com.disney.disneyplus" would say "Disney Disneyplus": drop a word another
+  // word already contains, and exact repeats.
+  std::string out;
+  for (size_t i = 0; i < segs.size(); i++) {
+    bool covered = false;
+    for (size_t j = 0; j < segs.size() && !covered; j++)
+      if (i != j && segs[j].find(segs[i]) != std::string::npos) covered = true;
+    if (covered) continue;
+    bool again = false;
+    for (size_t k = 0; k < i && !again; k++)
+      if (!segs[k].empty() && segs[k].size() == segs[i].size() && segs[k].find(segs[i]) == 0 &&
+          segs[i].find(segs[k]) == 0)
+        again = true;
+    if (again) continue;
+    if (!out.empty()) out += ' ';
+    const std::string &seg = segs[i];
+    if (seg.size() <= 3) {  // tv, hbo, hulu...: acronyms read better shouted
+      for (char ch : seg) out += (char) std::toupper((unsigned char) ch);
+    } else {
+      out += (char) std::toupper((unsigned char) seg[0]);
+      out += seg.substr(1);
+    }
+  }
+  return out.empty() ? a : out;
+}
+
 struct Model {
   Light lights[2];
   std::string player_state;      // off / standby / idle / on / playing / paused
@@ -180,6 +234,11 @@ struct Model {
 
   Mode mode() const {
     if (player_state == "playing" || player_state == "paused") return Mode::PLAYING;
+    // The Android TV Remote integration only ever reports "on"/"off" and no
+    // playback state, so treat a real app in front as playing: the screen
+    // then shows what is running (and the transport keys) instead of
+    // "Nothing playing".
+    if (player_state == "on" && !is_home_app(app)) return Mode::PLAYING;
     if (player_state == "on" || player_state == "idle") return Mode::IDLE;
     return Mode::OFF;
   }
@@ -776,7 +835,10 @@ inline std::string subtitle(const Model &m) {
   } else if (!m.artist.empty()) {
     s = m.artist;
   }
-  if (!m.app.empty()) s += s.empty() ? m.app : " · " + m.app;
+  if (!m.app.empty()) {
+    const std::string a = app_title(m.app);
+    s += s.empty() ? a : " · " + a;
+  }
   return s;
 }
 
@@ -796,7 +858,7 @@ inline void draw_now(Ctx &c, const Model &m, const GrayImage &poster, int64_t no
   if (m.mode() != Mode::PLAYING) {
     const int cy = NP_Y + NP_H / 2;
     c.it.print(W / 2, cy - 14, c.f.t22, c.ink, TextAlign::CENTER, "Nothing playing");
-    const std::string where = m.app.empty() ? std::string("Home screen") : m.app;
+    const std::string where = is_home_app(m.app) ? std::string("Home screen") : app_title(m.app);
     print_fit(c, W / 2, cy + 14, c.f.t18, c.ink, TextAlign::CENTER, where, W - 2 * M);
     return;
   }
@@ -810,14 +872,20 @@ inline void draw_now(Ctx &c, const Model &m, const GrayImage &poster, int64_t no
   }
 
   const int tw = W - M - NP_X;
-  print_fit(c, NP_X, NP_Y + 11, c.f.t22, c.ink, TextAlign::CENTER_LEFT,
-            m.title.empty() ? std::string("Playing") : m.title, tw);
-  print_fit(c, NP_X, NP_Y + 34, c.f.t18, c.ink, TextAlign::CENTER_LEFT, subtitle(m), tw);
+  // No media title (the Android TV Remote gives none): the app in front is
+  // the best headline there is.
+  const std::string head = !m.title.empty()
+      ? m.title
+      : (!m.app.empty() && !is_home_app(m.app) ? app_title(m.app) : std::string("Playing"));
+  const std::string sub = subtitle(m);
+  print_fit(c, NP_X, NP_Y + 11, c.f.t22, c.ink, TextAlign::CENTER_LEFT, head, tw);
+  if (sub != head) print_fit(c, NP_X, NP_Y + 34, c.f.t18, c.ink, TextAlign::CENTER_LEFT, sub, tw);
 
   // Seek bar: tap anywhere on it to jump there.
   const float pos = live_position(m, now_epoch);
   const bool seekable = !std::isnan(pos) && !std::isnan(m.duration) && m.duration > 0;
-  const bool playing = m.player_state == "playing";
+  // The Android TV Remote reports only "on": absence of "paused" is not a pause.
+  const bool playing = m.player_state != "paused";
   stroke_rrect(c, SEEK_X0, SEEK_Y, SEEK_X1 - SEEK_X0, SEEK_H, SEEK_H / 2, 2);
   const int scy = SEEK_Y + SEEK_H / 2;
   if (seekable) {
@@ -1639,6 +1707,11 @@ inline float to_float(const std::string &v) {
 // derived from the deep link ("https://www.youtube.com/tv" → "YouTube").
 inline std::string app_key_label(const std::string &app, const std::string &label) {
   if (!label.empty()) return label;
+  // A package id (the app id Android TV launches with): reshape it the way
+  // the now-playing line does, so the key says "YouTube TV", never "Com".
+  if (app.rfind("com.", 0) == 0 || app.rfind("org.", 0) == 0 ||
+      app.rfind("net.", 0) == 0 || app.rfind("io.", 0) == 0)
+    return app_title(app);
   std::string v = app;
   const size_t scheme = v.find("://");
   if (scheme != std::string::npos) v = v.substr(scheme + 3);

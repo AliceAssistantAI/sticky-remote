@@ -20,7 +20,7 @@ substitutions:
   # "true" appends the MAC's last bytes to the name (sticky-remote-a1b2c3), so
   # several Stickies can live in one home. The generic firmware sets it.
   name_add_mac_suffix: "false"
-  firmware_version: "0.8.5"
+  firmware_version: "0.8.6"
 
   # --- Defaults for the device settings (overridden by settings sent over USB)
   # Scenes the light dialog (press and hold a light) offers, as
@@ -643,16 +643,19 @@ script:
           action: media_player.volume_down
           data:
             entity_id: !lambda "return sticky::settings().player;"
-  # Opens the app key's app: the Android TV Remote integration launches apps
-  # through remote.turn_on, matching the app's name as the activity
-  # ("YouTube" starts the installed app whose name matches).
+  # Opens the app key's app through the player entity: the Android TV Remote
+  # integration launches apps with media_player.play_media, media_content_type
+  # "app", media_content_id the app id (com.google.android.youtube.tv). Going
+  # through the remote entity instead hit whatever entity the slug guess
+  # matched, not necessarily the TV.
   - id: tv_open_app
     then:
       - homeassistant.action:
-          action: remote.turn_on
+          action: media_player.play_media
           data:
-            entity_id: !lambda "return sticky::settings().remote;"
-            activity: !lambda "return sticky::settings().app;"
+            entity_id: !lambda "return sticky::settings().player;"
+            media_content_id: !lambda "return sticky::settings().app;"
+            media_content_type: app
 
   # Leave the "Asleep" face on the panel, then sleep. With the clock on (and
   # off USB, and set up), that is light sleep with a wake every minute to move
