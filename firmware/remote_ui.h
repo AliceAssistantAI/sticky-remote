@@ -1184,7 +1184,13 @@ constexpr int LP_SLIDER_H = 24, LP_ROW_H = 56, LP_ROW_GAP = 10;
 struct SceneRow { std::string id, name; };
 
 /// "scene.a|Movie night,scene.b|Reading" into rows; a bare id shows itself.
-inline int parse_scenes(const std::string &s, SceneRow (*rows)[MAX_SCENES]) {
+/// A third field limits the scene to rooms: "scene.a|Movie night|0+2" — room
+/// numbers as the setup page entered them. A scene without that field lives
+/// everywhere, which is what every scene written before rooms ever meant;
+/// with no rooms configured the field is moot and everything shows.
+inline int parse_scenes(const Model &m, SceneRow (*rows)[MAX_SCENES]) {
+  const std::string &s = m.scenes;
+  const bool scoped = !m.rooms.empty();
   int n = 0;
   size_t i = 0;
   while (n < MAX_SCENES && i < s.size()) {
@@ -1192,14 +1198,24 @@ inline int parse_scenes(const std::string &s, SceneRow (*rows)[MAX_SCENES]) {
     if (comma == std::string::npos) comma = s.size();
     const size_t bar = s.find('|', i);
     SceneRow row;
+    std::string room_tags;
     if (bar != std::string::npos && bar < comma) {
       row.id = s.substr(i, bar - i);
-      row.name = s.substr(bar + 1, comma - bar - 1);
+      const size_t bar2 = s.find('|', bar + 1);
+      if (bar2 != std::string::npos && bar2 < comma) {
+        row.name = s.substr(bar + 1, bar2 - bar - 1);
+        room_tags = s.substr(bar2 + 1, comma - bar2 - 1);
+      } else {
+        row.name = s.substr(bar + 1, comma - bar - 1);
+      }
     } else {
       row.id = s.substr(i, comma - i);
       row.name = row.id;
     }
-    if (!row.id.empty() && !row.name.empty()) (*rows)[n++] = row;
+    bool show = !scoped || room_tags.empty();
+    for (size_t k = 0; !show && k < room_tags.size(); k++)
+      if (room_tags[k] >= '0' && room_tags[k] <= '9' && room_tags[k] - '0' == m.room_index) show = true;
+    if (show && !row.id.empty() && !row.name.empty()) (*rows)[n++] = row;
     i = comma + 1;
   }
   return n;
@@ -1217,7 +1233,7 @@ struct LightPanel {
 inline LightPanel light_panel(const Model &m) {
   SceneRow rows[MAX_SCENES];
   LightPanel p{};
-  p.n_scenes = parse_scenes(m.scenes, &rows);
+  p.n_scenes = parse_scenes(m, &rows);
   p.x0 = LP_X; p.x1 = W - LP_X; p.y0 = LP_Y;
   p.px0 = p.x0 + LP_PAD; p.py0 = p.y0 + 20; p.pw = 64; p.ph = 52;
   p.cx0 = p.x1 - LP_PAD - 52; p.cy0 = p.y0 + 20; p.cw = 52; p.ch = 52;
@@ -1261,7 +1277,7 @@ inline void draw_light_panel(Ctx &c, const Model &m, const char *name) {
   c.it.filled_circle(hx, p.sy + LP_SLIDER_H / 2, 9, c.paper);
   // Scenes.
   SceneRow rows[MAX_SCENES];
-  const int n = parse_scenes(m.scenes, &rows);
+  const int n = parse_scenes(m, &rows);
   if (n) {
     c.it.print(p.x0 + LP_PAD, p.row_y0 - 30, c.f.t20, c.ink, TextAlign::CENTER_LEFT, "Scenes");
     for (int i = 0; i < n; i++) {
@@ -1272,7 +1288,9 @@ inline void draw_light_panel(Ctx &c, const Model &m, const char *name) {
     }
   } else {
     print_fit(c, p.sx0, p.sy + 58, c.f.t20, c.ink, TextAlign::CENTER_LEFT,
-              "No scenes yet - pick them on the setup page", p.sx1 - p.sx0);
+              m.scenes.empty() ? "No scenes yet - pick them on the setup page"
+                               : "No scenes for this room - tick them on the setup page",
+              p.sx1 - p.sx0);
   }
 }
 
@@ -1897,7 +1915,7 @@ inline Action handle_tap(int x, int y, int64_t now_epoch, Actions &act) {
       }
       case LIGHT_SCENE: {
         SceneRow rows[MAX_SCENES];
-        const int n = parse_scenes(m.scenes, &rows);
+        const int n = parse_scenes(m, &rows);
         const int i = (int) seek_to;
         if (i >= 0 && i < n) { act.turn_scene(rows[i].id); m.light_panel = -1; }
         request(true);

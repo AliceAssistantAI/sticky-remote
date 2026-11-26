@@ -24,7 +24,7 @@ open the setup page, connect the Sticky over USB for the settings, and pick
 
 | Area | What it does | Home Assistant |
 |---|---|---|
-| Top tiles | One or two lights — tap toggles, press and hold opens a brightness slider and your scenes — and the player's power | `light.toggle`, `light.turn_on`, `scene.turn_on`, `remote.turn_on/off` |
+| Top tiles | One or two lights — tap toggles, press and hold opens a brightness slider and your scenes (each scene can live in specific rooms) — and the player's power | `light.toggle`, `light.turn_on`, `scene.turn_on`, `remote.turn_on/off` |
 | Rooms | Optional: up to four room profiles on one Sticky (its player, its lights). Press and hold the room name to pick another; with room presence, Home Assistant moves it for you | a `Room` text entity (presence automations write the room's name), that room's `media_player` and `light` entities |
 | Pad | ↑ ↓ ← → and OK, with on-screen feedback. Hold an arrow to repeat it | `remote.send_command` `DPAD_UP`/`DPAD_DOWN`/`DPAD_LEFT`/`DPAD_RIGHT`/`DPAD_CENTER` |
 | Keys | Back, Home, the app button (e.g. YouTube), Play/Pause | `remote.send_command` `BACK`/`HOME`, `remote.turn_on` with the app name, `media_play_pause` |

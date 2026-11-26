@@ -3,6 +3,10 @@
 Each version's first list is what the Sticky shows on its update screen
 (short lines, plain characters); web/build.sh puts it in the update manifest.
 
+## 0.8.5
+
+- Scenes follow the room: the setup page remembers which rooms each scene belongs to, and the light card only shows the scenes that live in the room you are in.
+
 ## 0.8.4
 
 - AI button: a quick press sleeps, holding 5 seconds powers the device off; powering back on returns to the Launcher.

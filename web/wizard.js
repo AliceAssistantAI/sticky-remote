@@ -402,10 +402,29 @@ const VIEWS = [
         ${n === 2 ? `<button class="link" id="drop-light">Remove the second light</button>` : ""}</div>`;
     };
     const sceneList = list("scene");
-    const chosen = (s.scenes || "").split(",").map((t) => t.split("|")[0]).filter(Boolean);
+    // Rooms make scenes local: an entry may carry "|0+2" — the room numbers it
+    // belongs to (order of the rooms card). No room list = every room.
+    const roomNames = S.rooms.map((r) => cleanRoom(r.name) || "Room");
+    const readScenes = (text) => {
+      const map = {};
+      String(text || "").split(",").forEach((t) => {
+        const f = t.split("|");
+        if (!f[0]) return;
+        map[f[0]] = { rooms: (f[2] || "").split("+").map(Number).filter((n) => Number.isInteger(n) && n < roomNames.length) };
+      });
+      return map;
+    };
     const scenePicker = (manual || !sceneList.length)
-      ? `<input type="text" data-k="scenes" placeholder="scene.movie_night|Movie night, scene.all_off|All off" value="${esc(s.scenes)}">`
-      : sceneList.slice(0, 8).map((e) => `<label class="pick"><input type="checkbox" data-scene="${esc(e.entity_id)}" data-name="${esc(name(e))}" ${chosen.includes(e.entity_id) ? "checked" : ""}> ${esc(name(e))}</label>`).join("");
+      ? `<input type="text" data-k="scenes" placeholder="scene.movie_night|Movie night|0+1, scene.all_off|All off" value="${esc(s.scenes)}">`
+      : (() => {
+          const sc = readScenes(s.scenes);
+          return sceneList.slice(0, 8).map((e) => {
+            const on = !!sc[e.entity_id];
+            const chips = roomNames.length && on ? `<div class="scenerooms">` + roomNames.map((rn, ri) =>
+              `<label class="sceneroom"><input type="checkbox" data-scene-room="${esc(e.entity_id)}" data-roomidx="${ri}" ${sc[e.entity_id].rooms.includes(ri) ? "checked" : ""}> ${esc(rn)}</label>`).join("") + `</div>` : "";
+            return `<div class="scene-item"><label class="pick"><input type="checkbox" data-scene="${esc(e.entity_id)}" data-name="${esc(name(e))}" ${on ? "checked" : ""}> ${esc(name(e))}</label>${chips}</div>`;
+          }).join("");
+        })();
     const sources = S.ha.states.find((e) => e.entity_id === s.player)?.attributes?.source_list || [];
     const two = !!s.light2 || S.twoLights;
     // Optional smart rooms: several profiles, and (with Home Assistant room
@@ -504,7 +523,7 @@ const VIEWS = [
               ${two ? light(2) : s.light1 ? `<button class="link" id="add-light">+ Add a second light</button>` : ""}
               ${s.light1 && (manual || has("scenes")) ? `<div class="field"><span>Scenes</span>
                 ${scenePicker}
-                <small>Press and hold a light on the Sticky: a brightness slider and these scenes open up.</small></div>` : ""}
+                <small>Press and hold a light on the Sticky: a brightness slider and these scenes open up.${roomNames.length ? " Tick the rooms a scene belongs to - it only shows there. No rooms ticked shows it everywhere." : ""}</small></div>` : ""}
             </section>
             ${roomCard}
             <section class="card">
@@ -554,11 +573,18 @@ const VIEWS = [
         $("#use-ha")?.addEventListener("click", () => { S.skipped.delete(HA); go(HA); });
         $("#add-light")?.addEventListener("click", () => { S.twoLights = true; render(); });
         $("#drop-light")?.addEventListener("click", () => { S.twoLights = false; s.light2 = ""; s.light2_name = ""; render(); });
-        document.querySelectorAll("[data-scene]").forEach((el) => el.addEventListener("change", () => {
+        const rebuildScenes = () => {
           const on = [];
-          document.querySelectorAll("[data-scene]").forEach((x) => { if (x.checked) on.push(`${x.dataset.scene}|${x.dataset.name}`); });
+          document.querySelectorAll("[data-scene]").forEach((x) => {
+            if (!x.checked) return;
+            const idx = [...document.querySelectorAll(`[data-scene-room="${CSS.escape(x.dataset.scene)}"]`)]
+              .filter((r) => r.checked).map((r) => +r.dataset.roomidx).sort((p2, q) => p2 - q);
+            on.push(idx.length ? `${x.dataset.scene}|${x.dataset.name}|${idx.join("+")}` : `${x.dataset.scene}|${x.dataset.name}`);
+          });
           s.scenes = on.slice(0, 6).join(",");
-        }));
+        };
+        document.querySelectorAll("[data-scene]").forEach((el) => el.addEventListener("change", () => { rebuildScenes(); render(); }));
+        document.querySelectorAll("[data-scene-room]").forEach((el) => el.addEventListener("change", () => rebuildScenes()));
         document.querySelectorAll("[data-k]").forEach((el) => {
           el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
             const k = el.dataset.k;
