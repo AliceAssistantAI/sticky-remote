@@ -1,14 +1,14 @@
 {
   "name": "Sticky Remote",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "builds": [
     {
       "chipFamily": "ESP32-S3",
       "ota": {
-        "path": "https://github.com/AliceAssistantAI/sticky-remote/releases/download/v0.8.4/sticky-remote-0.8.4.ota.bin",
-        "md5": "db06212308d7d28e5ac17cb79098d16d",
-        "release_url": "https://github.com/AliceAssistantAI/sticky-remote/releases/tag/v0.8.4",
-        "summary": "AI button: a quick press sleeps, holding 5 seconds powers the device off; powering back on returns to the Launcher.\nInstalled from the Launcher app? The update notice now points to the Launcher, and the app no longer tries to install updates itself.\nBefore, a held AI button put the Sticky to sleep like a quick press did, and a self-update attempt inside a Launcher slot wrote the \"peer\" partition, which belongs to a different installed app: the update never took and a random app could lose its install. The Sticky now reads its own partition table: in a Launcher slot the Install button is replaced by the way through the Launcher (delete the app there, add the same URL again: it always serves the newest build), and the OTA target is emptied so even an install started from Home Assistant fails before it touches flash. A Sticky flashed on its own (factory image, no Launcher) keeps in-app updates exactly as before."
+        "path": "https://github.com/AliceAssistantAI/sticky-remote/releases/download/v0.8.5/sticky-remote-0.8.5.ota.bin",
+        "md5": "81c061a53095ed44521f454033767fff",
+        "release_url": "https://github.com/AliceAssistantAI/sticky-remote/releases/tag/v0.8.5",
+        "summary": "Scenes follow the room: the setup page remembers which rooms each scene belongs to, and the light card only shows the scenes that live in the room you are in."
       }
     }
   ]
