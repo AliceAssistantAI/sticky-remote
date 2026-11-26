@@ -1020,7 +1020,7 @@ function presenceYaml() {
       const room = cleanRoom(r.name) || "Room";
       const ids = (S.presence.sensors[i] || "").split(/[\s,]+/).filter(Boolean);
       const list = (ids.length ? ids : ["sensor.your_presence_sensor"]).map((x) => `        - ${x}`).join("\n");
-      const rep = S.presence.reported[i] ?? room;
+      const rep = (S.presence.reported[i] || "").trim() || room;
       return `# The Sticky moves to ${room} when a presence sensor reports it (ESPresense, Room Assistant, beacons)\n` +
         `alias: ${room} — Sticky follows\n` +
         `triggers:\n` +
